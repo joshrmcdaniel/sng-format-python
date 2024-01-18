@@ -1,8 +1,23 @@
+
+### Usage
+#
+## Decoding
+# outdir = 'test'
+# sng_file = read_sng_file('example.sng')
+# parsed_sng = parse_sng(sng_file)
+# write_parsed_sng(parsed_sng, outdir)
+#
+## Encoding
+# from encode import read_file_meta, encode_sng
+# xor_bytes = os.urandom(16)
+# metadata = read_file_meta(outdir)
+# encode_sng('encoded.sng', outdir, 1, xor_bytes, metadata)
+
+
 import struct
 from collections import namedtuple
 import os
 from configparser import ConfigParser
-
 
 SngMetadata = namedtuple('SngMetadata', ['filename', 'content_len', 'content_idx'])
 
@@ -15,13 +30,14 @@ def unmask(data, xor_mask):
     return unmasked_data
 
 
-def read_metadata(buffer, offset):
+def read_filedata(buffer, offset):
     filename_len = struct.unpack_from('<B', buffer, offset)[0]
     offset += 1
     filename = struct.unpack_from(f'<{filename_len}s', buffer, offset)[0].decode()
     offset += filename_len
     contents_len, contents_index = struct.unpack_from('<QQ', buffer, offset)
     offset += 16
+    metadata = SngMetadata(filename, contents_len, contents_index)
     return SngMetadata(filename, contents_len, contents_index), offset
 
 
@@ -50,11 +66,10 @@ def parse_sng(sng_buffer):
         metadata[key] = value
 
     file_meta_len, file_count = struct.unpack_from('<QQ', sng_buffer, offset)
-    print(file_meta_len)
     offset += 16
     file_meta_array = []
     for _ in range(file_count):
-        file_meta, new_offset = read_metadata(sng_buffer, offset)
+        file_meta, new_offset = read_filedata(sng_buffer, offset)
         file_meta_array.append(file_meta)
         offset = new_offset
 
