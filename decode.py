@@ -1,33 +1,11 @@
-
-### Usage
-#
-## Decoding
-# outdir = 'test'
-# sng_file = read_sng_file('example.sng')
-# parsed_sng = parse_sng(sng_file)
-# write_parsed_sng(parsed_sng, outdir)
-#
-## Encoding
-# from encode import read_file_meta, encode_sng
-# xor_bytes = os.urandom(16)
-# metadata = read_file_meta(outdir)
-# encode_sng('encoded.sng', outdir, 1, xor_bytes, metadata)
-
-
-import struct
-from collections import namedtuple
 import os
+import struct
+
+
 from configparser import ConfigParser
 
-SngMetadata = namedtuple('SngMetadata', ['filename', 'content_len', 'content_idx'])
 
-
-def unmask(data, xor_mask):
-    unmasked_data = bytearray(len(data))
-    for i in range(len(data)):
-        xor_key = xor_mask[i % 16] ^ (i & 0xFF)
-        unmasked_data[i] = data[i] ^ xor_key
-    return unmasked_data
+from sng_common import mask, SngMetadata
 
 
 def read_filedata(buffer, offset):
@@ -78,7 +56,7 @@ def parse_sng(sng_buffer):
     file_data_array = []
     for file_meta in file_meta_array:
         file_data = sng_buffer[offset:offset+file_meta.content_len]
-        file_data = unmask(file_data, xor_mask)
+        file_data = mask(file_data, xor_mask)
         file_data_array.append(file_data)
         offset += file_meta.content_len
 
