@@ -4,8 +4,7 @@ import struct
 
 from configparser import ConfigParser
 
-
-from sng_common import mask, SngMetadata
+from .common import mask, SngMetadata
 
 
 def read_filedata(buffer, offset):
@@ -87,7 +86,7 @@ def write_parsed_sng(parsed_data, outdir):
             file.write(file_data)
 
 
-def read_sng_file(path: str):
+def read_sng_file(path: str) -> bytes:
     with open(path, 'rb') as f:
         d = f.read()
     return d

@@ -2,8 +2,7 @@ import os
 
 from configparser import ConfigParser
 
-
-from sng_common import write_uint32, write_uint8, write_uint64, mask, SngMetadata
+from .common import write_uint32, write_uint8, write_uint64, mask, SngMetadata
 
 
 def write_header(file, version, xor_mask):
