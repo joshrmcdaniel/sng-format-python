@@ -6,30 +6,30 @@ from typing import List, NamedTuple, TypedDict
 
 def write_uint8(byte_io: bytearray | BufferedWriter, value):
     if isinstance(byte_io, bytearray):
-        byte_io += struct.pack('<B', value)
+        byte_io += struct.pack("<B", value)
     elif isinstance(byte_io, (FileIO, BufferedWriter)):
-        byte_io.write(struct.pack('<B', value))
+        byte_io.write(struct.pack("<B", value))
 
 
 def write_uint32(byte_io: bytearray | BufferedWriter, value: int | str | bytes):
     if isinstance(byte_io, bytearray):
-        byte_io += struct.pack('<I', value)
+        byte_io += struct.pack("<I", value)
     elif isinstance(byte_io, (FileIO, BufferedWriter)):
-        byte_io.write(struct.pack('<I', value))
+        byte_io.write(struct.pack("<I", value))
 
 
 def write_uint64(byte_io: bytearray | BufferedWriter, value: int | str | bytes):
     if isinstance(byte_io, bytearray):
-        byte_io += struct.pack('<Q', value)
+        byte_io += struct.pack("<Q", value)
     elif isinstance(byte_io, (FileIO, BufferedWriter)):
-        byte_io.write(struct.pack('<Q', value))
+        byte_io.write(struct.pack("<Q", value))
 
 
 def write_string(byte_io: bytearray | BufferedWriter, value: int | str | bytes):
     if isinstance(byte_io, bytearray):
-        byte_io += value.encode('utf-8')
+        byte_io += value.encode("utf-8")
     elif isinstance(byte_io, (FileIO, BufferedWriter)):
-        byte_io.write(value.encode('utf-8'))
+        byte_io.write(value.encode("utf-8"))
 
 
 def mask(data: bytes, xor_mask: bytes) -> bytearray:
@@ -78,7 +78,6 @@ class SngMetadataInfo(TypedDict):
     delay: int
     video_start_time: int
     end_events: bool
-
 
 
 class ParsedSngData(TypedDict):

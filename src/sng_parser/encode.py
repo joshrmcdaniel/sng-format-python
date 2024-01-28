@@ -2,10 +2,18 @@ import io
 import os
 
 from configparser import ConfigParser
-from typing import List
+from typing import List, Optional
 
 
-from .common import write_uint32, write_uint8, write_uint64, mask, SngFileMetadata, SngMetadataInfo
+from .common import (
+    write_uint32,
+    write_uint8,
+    write_uint64,
+    mask,
+    SngFileMetadata,
+    SngMetadataInfo,
+)
+
 
 def write_header(file: io.FileIO, version: int, xor_mask: bytes) -> None:
     file.write(b"SNGPKG")
@@ -13,7 +21,7 @@ def write_header(file: io.FileIO, version: int, xor_mask: bytes) -> None:
     file.write(xor_mask)
 
 
-def write_file_meta(file: io.FileIO, file_meta_array: List[SngFileMetadata]):
+def write_file_meta(file: io.FileIO, file_meta_array: List[SngFileMetadata]) -> None:
     file_meta_length = sum(
         1 + len(meta.filename.encode("utf-8")) + 16 for meta in file_meta_array
     )
@@ -57,7 +65,18 @@ def write_file_data(file: io.FileIO, file_data_array: List[bytearray], xor_mask:
         file.write(masked_data)
 
 
-def encode_sng(output_filename: os.PathLike, directory: os.PathLike, version: int, xor_mask: bytes, metadata: SngMetadataInfo):
+def to_sng_file(
+    output_filename: os.PathLike,
+    directory: os.PathLike,
+    version: int = 1,
+    xor_mask: Optional[bytes] = None,
+    metadata: Optional[SngMetadataInfo] = None,
+) -> None:
+    if metadata is None:
+        metadata = read_file_meta(directory)
+    if xor_mask is None:
+        xor_mask = os.urandom(16)
+
     with open(output_filename, "wb") as file:
         write_header(file, version, xor_mask)
         write_metadata(file, metadata)
@@ -90,7 +109,7 @@ def gather_files_from_directory(directory: os.PathLike):
     return file_meta_array, file_data_array
 
 
-def read_file_meta(filedir: os.PathLike):
+def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
     cfg = ConfigParser()
     with open(os.path.join(filedir, "song.ini")) as f:
         cfg.read_file(f)
