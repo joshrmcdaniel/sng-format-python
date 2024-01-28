@@ -1,7 +1,7 @@
 import os
 import struct
 
-from typing import List
+from typing import List, Optional
 
 from configparser import ConfigParser
 
@@ -24,7 +24,7 @@ def read_filedata(buffer: bytes, offset: int) -> SngFileMetadata:
     return metadata, offset
 
 
-def parse_sng(sng_buffer: bytes) -> ParsedSngData:
+def parse_sng_file(sng_buffer: bytes) -> ParsedSngData:
     file_identifier: bytes
     version: int
     xor_mask: bytes 
@@ -97,7 +97,14 @@ def write_parsed_sng(parsed_data: ParsedSngData, outdir: os.PathLike) -> None:
             file.write(file_data)
 
 
-def read_sng_file(path: os.PathLike) -> bytes:
+def convert_sng_file(path: os.PathLike, outdir: Optional[os.PathLike]=None):
     with open(path, 'rb') as f:
-        d = f.read()
-    return d
+        sng_buffer = f.read()
+    parsed_sng = parse_sng_file(sng_buffer)
+
+    if outdir is None:
+        artist = parsed_sng['metadata'].get("artist", "Unknown Artist")
+        song = parsed_sng['metadata'].get("song", "Unknown Song")
+        charter = parsed_sng['metadata'].get("charter", "Unknown Charter")
+        outdir = f"{artist} - {song} ({charter})"
+    write_parsed_sng(parsed_sng, outdir)
