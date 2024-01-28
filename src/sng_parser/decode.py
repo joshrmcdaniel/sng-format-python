@@ -97,10 +97,11 @@ def write_parsed_sng(parsed_data: ParsedSngData, outdir: os.PathLike) -> None:
             file.write(file_data)
 
 
-def convert_sng_file(path: os.PathLike, outdir: Optional[os.PathLike]=None):
-    with open(path, 'rb') as f:
-        sng_buffer = f.read()
-    parsed_sng = parse_sng_file(sng_buffer)
+def convert_sng_file(sng_file: os.PathLike | bytes, outdir: Optional[os.PathLike]=None):
+    if isinstance(sng_file, os.PathLike):
+        with open(sng_file, 'rb') as f:
+            sng_file = f.read()
+    parsed_sng = parse_sng_file(sng_file)
 
     if outdir is None:
         artist = parsed_sng['metadata'].get("artist", "Unknown Artist")
