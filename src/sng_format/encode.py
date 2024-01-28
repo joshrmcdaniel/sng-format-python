@@ -1,17 +1,19 @@
+import io
 import os
 
 from configparser import ConfigParser
+from typing import List
 
-from .common import write_uint32, write_uint8, write_uint64, mask, SngMetadata
 
+from .common import write_uint32, write_uint8, write_uint64, mask, SngFileMetadata, SngMetadataInfo
 
-def write_header(file, version, xor_mask):
+def write_header(file: io.FileIO, version: int, xor_mask: bytes) -> None:
     file.write(b"SNGPKG")
     write_uint32(file, version)
     file.write(xor_mask)
 
 
-def write_file_meta(file, file_meta_array):
+def write_file_meta(file: io.FileIO, file_meta_array: List[SngFileMetadata]):
     file_meta_length = sum(
         1 + len(meta.filename.encode("utf-8")) + 16 for meta in file_meta_array
     )
@@ -28,7 +30,7 @@ def write_file_meta(file, file_meta_array):
         write_uint64(file, file_meta.content_idx)
 
 
-def write_metadata(file, metadata):
+def write_metadata(file: io.FileIO, metadata: SngMetadataInfo) -> None:
     metadata_content = bytearray()
 
     for key, value in metadata.items():
@@ -46,7 +48,7 @@ def write_metadata(file, metadata):
     file.write(metadata_content)
 
 
-def write_file_data(file, file_data_array, xor_mask):
+def write_file_data(file: io.FileIO, file_data_array: List[bytearray], xor_mask: bytes):
     total_file_data_length = sum(len(data) for data in file_data_array)
     write_uint64(file, total_file_data_length)
 
@@ -55,7 +57,7 @@ def write_file_data(file, file_data_array, xor_mask):
         file.write(masked_data)
 
 
-def encode_sng(output_filename, directory, version, xor_mask, metadata):
+def encode_sng(output_filename: os.PathLike, directory: os.PathLike, version: int, xor_mask: bytes, metadata: SngMetadataInfo):
     with open(output_filename, "wb") as file:
         write_header(file, version, xor_mask)
         write_metadata(file, metadata)
@@ -64,7 +66,7 @@ def encode_sng(output_filename, directory, version, xor_mask, metadata):
         write_file_data(file, file_data_array, xor_mask)
 
 
-def gather_files_from_directory(directory):
+def gather_files_from_directory(directory: os.PathLike):
     file_meta_array = []
     file_data_array = []
     current_index = 0
@@ -78,7 +80,7 @@ def gather_files_from_directory(directory):
             with open(filepath, "rb") as file:
                 file_data = file.read()
 
-            file_meta = SngMetadata(filename, len(file_data), current_index)
+            file_meta = SngFileMetadata(filename, len(file_data), current_index)
             print(file_meta)
             file_meta_array.append(file_meta)
             file_data_array.append(file_data)
@@ -88,7 +90,7 @@ def gather_files_from_directory(directory):
     return file_meta_array, file_data_array
 
 
-def read_file_meta(filedir: str):
+def read_file_meta(filedir: os.PathLike):
     cfg = ConfigParser()
     with open(os.path.join(filedir, "song.ini")) as f:
         cfg.read_file(f)
