@@ -1,6 +1,5 @@
 import struct
-from io import BufferedWriter, FileIO
-
+from io import BufferedWriter, FileIO, BytesIO
 from typing import List, NamedTuple, TypedDict
 
 
@@ -38,6 +37,12 @@ def mask(data: bytes, xor_mask: bytes) -> bytearray:
         xor_key = xor_mask[i % 16] ^ (i & 0xFF)
         masked_data[i] = data[i] ^ xor_key
     return masked_data
+
+
+def calc_and_unpack(fmt: str, buf: BytesIO) -> tuple:
+    read_size = struct.calcsize(fmt)
+    buffer = buf.read(read_size)
+    return struct.unpack_from(fmt, buffer)
 
 
 class SngFileMetadata(NamedTuple):
