@@ -1,6 +1,6 @@
 import struct
-from io import BufferedWriter, FileIO, BytesIO
-from typing import NamedTuple, TypedDict
+from io import BufferedWriter, BufferedReader, FileIO, BytesIO
+from typing import NamedTuple, TypedDict, Tuple
 
 
 def write_uint8(byte_io: bytearray | BufferedWriter, value):
@@ -43,6 +43,10 @@ def calc_and_unpack(fmt: str, buf: BytesIO) -> tuple:
     read_size = struct.calcsize(fmt)
     buffer = buf.read(read_size)
     return struct.unpack_from(fmt, buffer)
+
+def calc_and_read_buf(fmt: str, buf: BufferedReader) -> Tuple[int, bytes]:
+    read_size = struct.calcsize(fmt)
+    return read_size, buf.read(read_size)
 
 
 class SngFileMetadata(NamedTuple):
