@@ -1,5 +1,5 @@
 from .common import SngFileMetadata, SngMetadataInfo, ParsedSngData
-from .decode import parse_sng_file, convert_sng_file, write_parsed_sng
+from .decode import decode_sng, decode_metadata
 from .encode import to_sng_file
 
 
