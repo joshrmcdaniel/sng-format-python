@@ -1,7 +1,10 @@
+import logging
+
 from .common import SngFileMetadata, SngMetadataInfo, SngHeader
 from .decode import decode_sng, decode_metadata
 from .encode import to_sng_file
 
+logger = logging.getLogger(__package__)
 
 __all__ = [
     "convert_sng_file",

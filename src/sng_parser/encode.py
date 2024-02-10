@@ -2,7 +2,8 @@ import io
 import os
 
 from configparser import ConfigParser
-from typing import List, Optional
+import struct
+from typing import List, Optional, Tuple
 
 
 from .common import (
@@ -22,47 +23,51 @@ def write_header(file: io.FileIO, version: int, xor_mask: bytes) -> None:
 
 
 def write_file_meta(file: io.FileIO, file_meta_array: List[SngFileMetadata]) -> None:
-    file_meta_length = sum(
-        1 + len(meta.filename.encode("utf-8")) + 16 for meta in file_meta_array
-    )
-    write_uint64(file, file_meta_length)
-    write_uint64(file, len(file_meta_array))
+    filemeta_buf = struct.pack('<Q', len(file_meta_array))
 
     for file_meta in file_meta_array:
-        filename_bytes = file_meta.filename.encode("utf-8")
-
-        write_uint8(file, len(filename_bytes))
-        file.write(filename_bytes)
-
-        write_uint64(file, file_meta.content_len)
-        write_uint64(file, file_meta.content_idx)
+        filename_len = len(file_meta.filename)
+        filemeta_buf += struct.pack('<B', filename_len)
+        filename_packed = struct.pack(f"<{filename_len}s", file_meta.filename.encode('utf-8'))
+        filemeta_buf += filename_packed
+        
+        filemeta_buf += struct.pack("<Q", file_meta.content_len)
+        filemeta_buf += struct.pack("<Q", file_meta.content_idx)
+    
+    file.write(struct.pack('<Q', len(filemeta_buf)))
+    file.write(filemeta_buf)
 
 
 def write_metadata(file: io.FileIO, metadata: SngMetadataInfo) -> None:
-    metadata_content = bytearray()
+    metadata_content = struct.pack("<Q", len(metadata))
 
-    for key, value in metadata.items():
-        key_bytes = key.encode("utf-8")
-        value_bytes = value.encode("utf-8")
+    key: str
+    value: str
+    for key, val in metadata.items():
+        key_len: int = len(key)
+        key_len_packed = struct.pack('<I', key_len)
+        key: bytes = struct.pack(f"<{key_len}s", key.encode('utf-8'))
 
-        write_uint32(metadata_content, len(key_bytes))
-        metadata_content += key_bytes
-
-        write_uint32(metadata_content, len(value_bytes))
-        metadata_content += value_bytes
-
-    write_uint64(file, len(metadata_content))
-    write_uint64(file, len(metadata))
+        value_len: int = len(val)
+        value_len_packed: bytes = struct.pack('<I', value_len)
+        value: bytes = struct.pack(f'<{value_len}s', val.encode('utf-8'))
+        metadata_content += key_len_packed+key+value_len_packed+value
+    file.write(struct.pack("<Q", len(metadata_content)))
     file.write(metadata_content)
 
 
-def write_file_data(file: io.FileIO, file_data_array: List[bytearray], xor_mask: bytes):
-    total_file_data_length = sum(len(data) for data in file_data_array)
-    write_uint64(file, total_file_data_length)
+def write_file_data(out: io.FileIO, file_meta_array: List[Tuple[str, SngFileMetadata]], xor_mask: bytes):
+    total_file_data_length = sum(map(lambda x: x[1].content_len, file_meta_array))
+    out.write(struct.pack('<Q', total_file_data_length))
 
-    for data in file_data_array:
-        masked_data = mask(data, xor_mask)
-        file.write(masked_data)
+    for filename, file_metadata in file_meta_array:
+        amt_read = 0
+        with open(filename, 'rb') as f:
+            while file_metadata.content_len > amt_read:
+                chunk_size = 1024 if file_metadata.content_len - amt_read > 1023 else file_metadata.content_len - amt_read
+                amt_read += chunk_size
+                buf = f.read(chunk_size)
+                out.write(mask(buf, xor_mask))
 
 
 def to_sng_file(
@@ -80,15 +85,14 @@ def to_sng_file(
     with open(output_filename, "wb") as file:
         write_header(file, version, xor_mask)
         write_metadata(file, metadata)
-        file_meta_array, file_data_array = gather_files_from_directory(directory)
-        write_file_meta(file, file_meta_array)
-        write_file_data(file, file_data_array, xor_mask)
+        file_meta_array = gather_files_from_directory(directory, offset=file.tell())
+        write_file_meta(file, list(map(lambda x: x[1], file_meta_array)))
+        write_file_data(file, file_meta_array, xor_mask)
 
 
-def gather_files_from_directory(directory: os.PathLike):
+def gather_files_from_directory(directory: os.PathLike, offset: int) -> List[Tuple[str, SngFileMetadata]]:
     file_meta_array = []
-    file_data_array = []
-    current_index = 0
+    current_index = offset
 
     for filename in os.listdir(directory):
         if filename == "song.ini":
@@ -97,16 +101,14 @@ def gather_files_from_directory(directory: os.PathLike):
         filepath = os.path.join(directory, filename)
         if os.path.isfile(filepath):
             with open(filepath, "rb") as file:
-                file_data = file.read()
+                size = file.seek(0, os.SEEK_END)
 
-            file_meta = SngFileMetadata(filename, len(file_data), current_index)
-            print(file_meta)
-            file_meta_array.append(file_meta)
-            file_data_array.append(file_data)
+            file_meta = SngFileMetadata(filename, size, current_index)
+            file_meta_array.append((filepath, file_meta))
 
-            current_index += len(file_data)
+            current_index += size
 
-    return file_meta_array, file_data_array
+    return file_meta_array
 
 
 def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
