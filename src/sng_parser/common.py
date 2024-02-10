@@ -1,6 +1,6 @@
 import struct
 from io import BufferedWriter, FileIO, BytesIO
-from typing import List, NamedTuple, TypedDict
+from typing import NamedTuple, TypedDict
 
 
 def write_uint8(byte_io: bytearray | BufferedWriter, value):
@@ -50,6 +50,10 @@ class SngFileMetadata(NamedTuple):
     content_len: int
     content_idx: int
 
+class SngHeader(NamedTuple):
+    file_identifier: bytes
+    version: int
+    xor_mask: bytes
 
 class SngMetadataInfo(TypedDict):
     name: str
@@ -83,12 +87,3 @@ class SngMetadataInfo(TypedDict):
     delay: int
     video_start_time: int
     end_events: bool
-
-
-class ParsedSngData(TypedDict):
-    file_identifier: str
-    version: int
-    xor_mask: bytes
-    metadata: SngMetadataInfo
-    file_meta_array: List[SngFileMetadata]
-    file_data_array: List[bytearray]

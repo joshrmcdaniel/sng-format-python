@@ -1,4 +1,4 @@
-from .common import SngFileMetadata, SngMetadataInfo, ParsedSngData
+from .common import SngFileMetadata, SngMetadataInfo
 from .decode import decode_sng, decode_metadata
 from .encode import to_sng_file
 
@@ -8,7 +8,6 @@ __all__ = [
     "convert_sng_file",
     "SngFileMetadata",
     "SngMetadataInfo",
-    "ParsedSngData",
     "write_parsed_sng",
     "to_sng_file",
 ]
