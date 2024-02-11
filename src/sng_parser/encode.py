@@ -1,116 +1,296 @@
-import io
+import hashlib
+import logging
 import os
+import struct
 
 from configparser import ConfigParser
-from typing import List, Optional
+from io import BufferedWriter
+from typing import List, Optional, Tuple
 
 
-from .common import (
-    write_uint32,
-    write_uint8,
-    write_uint64,
-    mask,
-    SngFileMetadata,
-    SngMetadataInfo,
-)
+from .common import SNG_RESERVED_FILES, mask, _with_endian, _valid_sng_file, SngFileMetadata, SngMetadataInfo, StructTypes
 
 
-def write_header(file: io.FileIO, version: int, xor_mask: bytes) -> None:
+s = StructTypes
+logger = logging.getLogger(__package__)
+
+
+def write_header(file: BufferedWriter, version: int, xor_mask: bytes) -> None:
+    """
+    Writes the header information for an SNG file to the given file buffer.
+
+    The header includes a fixed signature ('SNGPKG'), the version of the file
+    format as an unsigned integer, and a byte sequence used as an XOR mask
+    for encryption.
+
+    Args:
+        file (BufferedWriter): The file buffer to write the header to.
+        version (int): The version of the SNG file format.
+        xor_mask (bytes): The byte sequence used as an XOR mask for file encryption.
+
+    Returns:
+        None
+    """
+    logger.info("Writing sng header")
     file.write(b"SNGPKG")
-    write_uint32(file, version)
+    file.write(struct.pack(_with_endian(s.UINT), version))
     file.write(xor_mask)
+    logger.info("Wrote header")
 
 
-def write_file_meta(file: io.FileIO, file_meta_array: List[SngFileMetadata]) -> None:
-    file_meta_length = sum(
-        1 + len(meta.filename.encode("utf-8")) + 16 for meta in file_meta_array
-    )
-    write_uint64(file, file_meta_length)
-    write_uint64(file, len(file_meta_array))
+def write_file_meta(
+    file: BufferedWriter, file_meta_array: List[SngFileMetadata]
+) -> None:
+    """
+    Writes metadata for multiple files included in the SNG package.
+
+    Each file's metadata includes its name, content length, and offset within the SNG file.
+    The total size of the metadata section and the number of files are also included.
+
+    Args:
+        file (BufferedWriter): The file buffer to write the metadata to.
+        file_meta_array (List[SngFileMetadata]): A list of metadata objects for each file.
+
+    Returns:
+        None
+    """
+    logger.info("Writing file metadata")
+
+    calcd_size = struct.calcsize(_with_endian(s.ULONGLONG))
+    for file_meta in file_meta_array:
+        filename_len = len(file_meta.filename)
+        calcd_size += (
+            struct.calcsize(_with_endian(s.UBYTE))
+            + struct.calcsize(_with_endian(filename_len, s.CHAR))
+            + struct.calcsize(_with_endian(s.ULONGLONG)) * 2
+        )
+
+    file.write(struct.pack(_with_endian(s.ULONGLONG), calcd_size))
+    file.write(struct.pack(_with_endian(s.ULONGLONG), len(file_meta_array)))
+    logger.debug("Calculated file metadata section size: %d", calcd_size)
+
+    fileoffset = file.tell() + calcd_size
+    logger.debug("File content section start: %d", fileoffset)
 
     for file_meta in file_meta_array:
-        filename_bytes = file_meta.filename.encode("utf-8")
+        logger.debug("Writing file metadata for %s", file_meta.filename)
+        filename_len = len(file_meta.filename)
+        file.write(struct.pack(_with_endian(s.UBYTE), filename_len))
+        filename_packed = struct.pack(
+            _with_endian(filename_len, s.CHAR), file_meta.filename.encode("utf-8")
+        )
+        file.write(filename_packed)
+        logger.debug("%s content size: %d", file_meta.filename, file_meta.content_len)
+        file.write(struct.pack(_with_endian(s.ULONGLONG), file_meta.content_len))
+        logger.debug("%s offset: %d", file_meta.filename, fileoffset)
+        file.write(struct.pack(_with_endian(s.ULONGLONG), fileoffset))
+        fileoffset += file_meta.content_len
 
-        write_uint8(file, len(filename_bytes))
-        file.write(filename_bytes)
-
-        write_uint64(file, file_meta.content_len)
-        write_uint64(file, file_meta.content_idx)
+    logger.info("Wrote file metadata for %d files", len(file_meta_array))
 
 
-def write_metadata(file: io.FileIO, metadata: SngMetadataInfo) -> None:
-    metadata_content = bytearray()
+def write_metadata(file: BufferedWriter, metadata: SngMetadataInfo) -> None:
+    """
+    Writes key-value pairs of metadata information for the SNG file.
 
-    for key, value in metadata.items():
-        key_bytes = key.encode("utf-8")
-        value_bytes = value.encode("utf-8")
+    The metadata is stored as a series of length-prefixed strings (both for keys and values),
+    with the total length of the metadata section prefixed at the start.
 
-        write_uint32(metadata_content, len(key_bytes))
-        metadata_content += key_bytes
+    Args:
+        file (BufferedWriter): The file buffer to write the metadata to.
+        metadata (SngMetadataInfo): A dictionary containing metadata key-value pairs.
 
-        write_uint32(metadata_content, len(value_bytes))
-        metadata_content += value_bytes
+    Returns:
+        None
+    """
+    logger.info("Writing song metadata")
 
-    write_uint64(file, len(metadata_content))
-    write_uint64(file, len(metadata))
+    metadata_content = struct.pack(_with_endian(s.ULONGLONG), len(metadata))
+    key: str
+    value: str
+    for key, val in metadata.items():
+        key_len: int = len(key)
+        key_len_packed = struct.pack(_with_endian(s.UINT), key_len)
+        key: bytes = struct.pack(_with_endian(key_len, s.CHAR), key.encode("utf-8"))
+
+        value_len: int = len(val)
+        value_len_packed: bytes = struct.pack(_with_endian(s.UINT), value_len)
+        value: bytes = struct.pack(_with_endian(value_len, s.CHAR), val.encode("utf-8"))
+        metadata_content += key_len_packed + key + value_len_packed + value
+
+    file.write(struct.pack(_with_endian(s.ULONGLONG), len(metadata_content)))
     file.write(metadata_content)
 
+    logger.info("Wrote song metadata")
 
-def write_file_data(file: io.FileIO, file_data_array: List[bytearray], xor_mask: bytes):
-    total_file_data_length = sum(len(data) for data in file_data_array)
-    write_uint64(file, total_file_data_length)
+def write_file_data(
+    out: BufferedWriter,
+    file_meta_array: List[Tuple[str, SngFileMetadata]],
+    xor_mask: bytes,
+):
+    """
+    Writes the actual file data for each file included in the SNG package.
 
-    for data in file_data_array:
-        masked_data = mask(data, xor_mask)
-        file.write(masked_data)
+    File data is read from the source files, optionally masked with an XOR mask for encryption,
+    and written to the SNG file. Each file's data is preceded by its total length.
+
+    Args:
+        out (BufferedWriter): The output file buffer to write the data to.
+        file_meta_array (List[Tuple[str, SngFileMetadata]]): A list of tuples containing file paths and their metadata.
+        xor_mask (bytes): The byte sequence used as an XOR mask for file data encryption.
+
+    Returns:
+        None
+    """
+    logger.debug("Writing file data")
+
+    total_file_data_length = sum(map(lambda x: x[1].content_len, file_meta_array))
+    out.write(struct.pack(_with_endian(s.ULONGLONG), total_file_data_length))
+
+    for filename, file_metadata in file_meta_array:
+        chunk_size = 1024
+        with open(filename, "rb") as f:
+            while f.tell() != file_metadata.content_len:
+                if file_metadata.content_len - f.tell() < chunk_size:
+                    chunk_size = file_metadata.content_len - f.tell()
+                buf = f.read(chunk_size)
+                out.write(mask(buf, xor_mask))
+
+    logger.debug("Wrote file data")
 
 
-def to_sng_file(
-    output_filename: os.PathLike,
-    directory: os.PathLike,
+def encode_sng(
+    dir_to_encode: os.PathLike,
+    *,
+    output_filename: Optional[os.PathLike] = None,
+    allow_nonsng_files: bool= False,
+    overwrite: bool = False,
     version: int = 1,
     xor_mask: Optional[bytes] = None,
     metadata: Optional[SngMetadataInfo] = None,
 ) -> None:
+    """
+    Encodes a directory of files into a single SNG package file.
+
+    This process involves reading metadata, writing a header, encoding file metadata,
+    and writing the actual file data, optionally applying an XOR mask for encryption.
+
+    Args:
+        dir_to_encode (os.PathLike): The directory containing files to be encoded into the SNG package.
+        output_filename (os.PathLike, optional): The path to the output SNG file. Defaults to the md5 sum of the containing files of converted dir.
+        allow_nonsng_files (bool, optional): Allow encoding of files not allowed by the sng standard. Defaults to False.
+        overwrite (bool, optional): If True, existing files or directories will be overwritten. Defaults to False.
+        version (int, optional): The version of the SNG format to use. Defaults to 1.
+        xor_mask (bytes, optional): An optional XOR mask for encryption. If not provided, a random one is generated.
+        metadata (SngMetadataInfo, optional): Metadata for the SNG package. If not provided, it's read from a 'song.ini' file in the directory.
+
+    Returns:
+        None
+    """
+    if not os.path.exists(dir_to_encode):
+        raise FileNotFoundError("%s was not found." % dir_to_encode)
     if metadata is None:
-        metadata = read_file_meta(directory)
+        metadata = read_file_meta(dir_to_encode)
     if xor_mask is None:
         xor_mask = os.urandom(16)
-
+    if (x:=len(xor_mask)) != 16:
+        raise ValueError("xor mask should be of length 16, found xor_mask of length %d" % x)
+    if output_filename is None:
+        output_filename = create_sng_filename(dir_to_encode)+'.sng'
+    if not output_filename.endswith('.sng'):
+        output_filename += '.sng'
+    if os.path.exists(output_filename) and not overwrite:
+        raise FileExistsError("Sng file exists: %s" % output_filename)
     with open(output_filename, "wb") as file:
         write_header(file, version, xor_mask)
         write_metadata(file, metadata)
-        file_meta_array, file_data_array = gather_files_from_directory(directory)
-        write_file_meta(file, file_meta_array)
-        write_file_data(file, file_data_array, xor_mask)
+        file_meta_array = gather_files_from_directory(dir_to_encode, offset=file.tell(), allow_nonsng_files=allow_nonsng_files)
+        write_file_meta(file, list(map(lambda x: x[1], file_meta_array)))
+        write_file_data(file, file_meta_array, xor_mask)
 
 
-def gather_files_from_directory(directory: os.PathLike):
+def _get_file_md5(path: os.PathLike) -> str:
+    filehash = hashlib.md5()
+    with open(path, 'rb') as f:
+        size = f.seek(0, os.SEEK_END)
+        chunk_size = 1024
+        f.seek(0)
+        while f.tell() != size:
+            if size - f.tell() < chunk_size:
+                chunk_size = size - f.tell()
+            buf = f.read(chunk_size)
+            filehash.update(buf)
+    return filehash.hexdigest()
+
+
+def create_sng_filename(sng_dir: os.PathLike) -> str:
+    filehash = hashlib.md5()
+    for file_name in sorted(os.listdir(sng_dir)):
+        path = os.path.join(sng_dir, file_name)
+        filehash.update(file_name.encode('utf-8'))
+        filehash.update(_get_file_md5(path).encode())
+    return filehash.hexdigest()
+        
+
+def gather_files_from_directory(
+    directory: os.PathLike, *, offset: int, allow_nonsng_files: bool
+) -> List[Tuple[str, SngFileMetadata]]:
+    """
+    Gathers and prepares file metadata for all files in a given directory, excluding 'song.ini'.
+
+    Each file's metadata includes its name, size, and offset position within the SNG file.
+
+    Args:
+        directory (os.PathLike): The directory to scan for files.
+        offset (int): The initial offset where file data will start in the SNG file.
+        allow_nonsng_files (bool): Allow encoding of files not allowed by the sng standard.
+
+    Returns:
+        List[Tuple[str, SngFileMetadata]]: A list of tuples containing file paths and their corresponding metadata objects.
+    """
     file_meta_array = []
-    file_data_array = []
-    current_index = 0
+    current_index = offset
 
     for filename in os.listdir(directory):
-        if filename == "song.ini":
-            continue
-
+        if not _valid_sng_file(filename):
+            if filename in SNG_RESERVED_FILES:
+                logger.debug("%s is reserved, skipping", filename)
+                continue
+            logger.warning("Found encoded file not set by the sng standard: %s", filename)
+            if not allow_nonsng_files:
+                logger.warning("Allowing non-sng files is set to False, skipping file %s.", filename)
+                continue
+            logger.warning("Allowing non-sng files is set to True, encoding file %s.", filename)
+            
         filepath = os.path.join(directory, filename)
         if os.path.isfile(filepath):
             with open(filepath, "rb") as file:
-                file_data = file.read()
+                size = file.seek(0, os.SEEK_END)
 
-            file_meta = SngFileMetadata(filename, len(file_data), current_index)
-            print(file_meta)
-            file_meta_array.append(file_meta)
-            file_data_array.append(file_data)
+            file_meta = SngFileMetadata(filename, size, current_index)
+            file_meta_array.append((filepath, file_meta))
 
-            current_index += len(file_data)
+            current_index += size
 
-    return file_meta_array, file_data_array
+    return file_meta_array
 
 
 def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
+    """
+    Reads metadata from a 'song.ini' file located in the given directory.
+
+    The metadata is expected to be under a '[Song]' section in the INI file.
+
+    Args:
+        filedir (os.PathLike): The directory containing the 'song.ini' file.
+
+    Returns:
+        SngMetadataInfo: A dictionary containing the metadata key-value pairs.
+    """
     cfg = ConfigParser()
-    with open(os.path.join(filedir, "song.ini")) as f:
+    ini_path = os.path.join(filedir, "song.ini")
+    if not os.path.exists(ini_path):
+        raise FileNotFoundError("song.ini not found in provided directory '%s'." % filedir)
+    with open(ini_path) as f:
         cfg.read_file(f)
     return dict(cfg["Song"])
