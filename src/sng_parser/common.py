@@ -107,17 +107,11 @@ SNG_VIDEO_FILES: Final = {"video"}
 
 SNG_VIDEO_EXT: Final = {"mp4", "avi", "webm", "vp8", "ogv", "mpeg"}
 
+SNG_ILLGAL_CHARS: Final = {
+    '<>:"/|?*\\'
+}
 
-SNG_ILLEGAL_NAMING: Final = {
-    '<',
-    '>',
-    ':',
-    '"',
-    '/',
-    "\\",
-    '|',
-    '?'
-    '*',
+SNG_ILLEGAL_FILENAMES: Final = {
     '..',
     'CON',
     'PRN',
@@ -175,13 +169,20 @@ def _valid_audio_file(filename: str, ext: str) -> bool:
 
 
 def _illegal_filename(file: str) -> bool:
+    if len(file) > 255:
+        return True
     file = file.upper()
     if file.endswith('.') or file.endswith(' '):
         return True
     if any(ord(x) < 31 for x in file):
         return True
     file = file.upper()
-    return any(ilgl_name.upper() in file for ilgl_name in SNG_ILLEGAL_NAMING)
+    if any(ilgl_chr in file for ilgl_chr in SNG_ILLGAL_CHARS):
+        return True
+
+    filename, ext = file.rsplit('.', 2)
+    return any(x in filename or x in ext for x in SNG_ILLEGAL_FILENAMES)
+
 
 
 def _valid_sng_file(file: str) -> bool:
