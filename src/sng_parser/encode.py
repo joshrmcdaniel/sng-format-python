@@ -181,8 +181,8 @@ def encode_sng(
         allow_nonsng_files (bool, optional): Allow encoding of files not allowed by the sng standard. Defaults to False.
         overwrite (bool, optional): If True, existing files or directories will be overwritten. Defaults to False.
         version (int, optional): The version of the SNG format to use. Defaults to 1.
-        xor_mask (Optional[bytes], optional): An optional XOR mask for encryption. If not provided, a random one is generated.
-        metadata (Optional[SngMetadataInfo], optional): Metadata for the SNG package. If not provided, it's read from a 'song.ini' file in the directory.
+        xor_mask (bytes, optional): An optional XOR mask for encryption. If not provided, a random one is generated.
+        metadata (SngMetadataInfo, optional): Metadata for the SNG package. If not provided, it's read from a 'song.ini' file in the directory.
 
     Returns:
         None

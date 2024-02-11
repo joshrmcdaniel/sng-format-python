@@ -347,9 +347,9 @@ def decode_sng(
 
     Args:
         sng_file (os.PathLike | str | BufferedReader): The SNG file or buffer to decode.
-        outdir (Optional[os.PathLike | str], optional): The base output directory for decoded content. Defaults to the current directory.
+        outdir (os.PathLike | str, optional): The base output directory for decoded content. Defaults to the current directory.
         allow_nonsng_files (bool, optional): Allow decoding of files not allowed by the sng standard. Defaults to False.
-        sng_dir (Optional[os.PathLike | str], optional): The specific directory within outdir to write the decoded content. Generated from metadata if not specified.
+        sng_dir (os.PathLike | str, optional): The specific directory within outdir to write the decoded content. Generated from metadata if not specified.
         overwrite (bool, optional): If True, existing files or directories will be overwritten. Defaults to False.
 
     Returns:
