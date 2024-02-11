@@ -193,6 +193,8 @@ def encode_sng(
         metadata = read_file_meta(dir_to_encode)
     if xor_mask is None:
         xor_mask = os.urandom(16)
+    if (x:=len(xor_mask)) != 16:
+        raise ValueError("xor mask should be of length 16, found xor_mask of length %d" % x)
     if output_filename is None:
         output_filename = create_sng_filename(dir_to_encode)+'.sng'
     if not output_filename.endswith('.sng'):
