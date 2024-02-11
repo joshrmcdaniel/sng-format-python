@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import struct
@@ -147,15 +148,11 @@ def write_file_data(
     out.write(struct.pack(_with_endian(s.ULONGLONG), total_file_data_length))
 
     for filename, file_metadata in file_meta_array:
-        amt_read = 0
+        chunk_size = 1024
         with open(filename, "rb") as f:
-            while file_metadata.content_len > amt_read:
-                chunk_size = (
-                    1024
-                    if file_metadata.content_len - amt_read > 1023
-                    else file_metadata.content_len - amt_read
-                )
-                amt_read += chunk_size
+            while f.tell() != file_metadata.content_len:
+                if file_metadata.content_len - f.tell() < chunk_size:
+                    chunk_size = file_metadata.content_len - f.tell()
                 buf = f.read(chunk_size)
                 out.write(mask(buf, xor_mask))
 
@@ -167,6 +164,7 @@ def encode_sng(
     *,
     output_filename: Optional[os.PathLike] = None,
     allow_nonsng_files: bool= False,
+    overwrite: bool = False,
     version: int = 1,
     xor_mask: Optional[bytes] = None,
     metadata: Optional[SngMetadataInfo] = None,
@@ -181,6 +179,7 @@ def encode_sng(
         dir_to_encode (os.PathLike): The directory containing files to be encoded into the SNG package.
         output_filename (os.PathLike, optional): The path to the output SNG file. Defaults to the md5 sum of the resulting encoding.
         allow_nonsng_files (bool, optional): Allow encoding of files not allowed by the sng standard. Defaults to False.
+        overwrite (bool, optional): If True, existing files or directories will be overwritten. Defaults to False.
         version (int, optional): The version of the SNG format to use. Defaults to 1.
         xor_mask (Optional[bytes], optional): An optional XOR mask for encryption. If not provided, a random one is generated.
         metadata (Optional[SngMetadataInfo], optional): Metadata for the SNG package. If not provided, it's read from a 'song.ini' file in the directory.
@@ -188,14 +187,18 @@ def encode_sng(
     Returns:
         None
     """
+    if not os.path.exists(dir_to_encode):
+        raise FileNotFoundError("%s was not found." % dir_to_encode)
     if metadata is None:
         metadata = read_file_meta(dir_to_encode)
     if xor_mask is None:
         xor_mask = os.urandom(16)
     if output_filename is None:
-        output_filename = dir_to_encode+'.sng'
+        output_filename = create_sng_filename(dir_to_encode)+'.sng'
     if not output_filename.endswith('.sng'):
         output_filename += '.sng'
+    if os.path.exists(output_filename) and not overwrite:
+        raise FileExistsError("Sng file exists: %s" % output_filename)
     with open(output_filename, "wb") as file:
         write_header(file, version, xor_mask)
         write_metadata(file, metadata)
@@ -203,6 +206,29 @@ def encode_sng(
         write_file_meta(file, list(map(lambda x: x[1], file_meta_array)))
         write_file_data(file, file_meta_array, xor_mask)
 
+
+def _get_file_md5(path: os.PathLike) -> str:
+    filehash = hashlib.md5()
+    with open(path, 'rb') as f:
+        size = f.seek(0, os.SEEK_END)
+        chunk_size = 1024
+        f.seek(0)
+        while f.tell() != size:
+            if size - f.tell() < chunk_size:
+                chunk_size = size - f.tell()
+            buf = f.read(chunk_size)
+            filehash.update(buf)
+    return filehash.hexdigest()
+
+
+def create_sng_filename(sng_dir: os.PathLike) -> str:
+    filehash = hashlib.md5()
+    for file_name in sorted(os.listdir(sng_dir)):
+        path = os.path.join(sng_dir, file_name)
+        filehash.update(file_name.encode('utf-8'))
+        filehash.update(_get_file_md5(path).encode())
+    return filehash.hexdigest()
+        
 
 def gather_files_from_directory(
     directory: os.PathLike, *, offset: int, allow_nonsng_files: bool
@@ -262,7 +288,7 @@ def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
     cfg = ConfigParser()
     ini_path = os.path.join(filedir, "song.ini")
     if not os.path.exists(ini_path):
-        raise FileNotFoundError("song.ini not found in provided directory.")
+        raise FileNotFoundError("song.ini not found in provided directory '%s'." % filedir)
     with open(ini_path) as f:
         cfg.read_file(f)
     return dict(cfg["Song"])

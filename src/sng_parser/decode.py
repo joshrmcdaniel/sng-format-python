@@ -285,23 +285,19 @@ def _write_file_contents(
     Returns:
         None
     """
-    amt_read = 0
     file_path = os.path.join(outdir, file_metadata.filename)
     logger.debug("Writing file %s", file_metadata.filename)
     with open(file_path, "wb") as out:
-        while file_metadata.content_len > amt_read:
-            chunk_size = (
-                1024
-                if file_metadata.content_len - amt_read > 1023
-                else file_metadata.content_len - amt_read
-            )
-            amt_read += chunk_size
+        chunk_size = 1024
+        while out.tell() != file_metadata.content_len:
+            if file_metadata.content_len - out.tell() < chunk_size:
+                chunk_size = file_metadata.content_len - out.tell()
             buf = buffer.read(chunk_size)
             out.write(mask(buf, xor_mask))
-        if file_metadata.content_len != amt_read:
+        if file_metadata.content_len != out.tell():
             raise RuntimeError(
                 "File write mismatch. Expected %d, wrote %d"
-                % (file_metadata.content_len, amt_read)
+                % (file_metadata.content_len, out.tell())
             )
 
     logger.debug("Wrote %s in %s", file_metadata.filename, outdir)
