@@ -138,14 +138,14 @@ def write_file_contents(file_meta_array: List[SngFileMetadata], buffer: Buffered
 
     file_data_len: int = calc_and_unpack("<Q", buffer)[0]
     file_meta_content_size: int = sum(map(lambda x: x.content_len, file_meta_array))
+    print(file_data_len)
+    print(file_meta_content_size)
 
     if file_meta_content_size != file_data_len:
         raise RuntimeError("File content size mismatch. Expected %d, got %d)" % ( file_data_len, file_meta_content_size))
     
     for file_meta in file_meta_array:
-        cur_offset = buffer.tell()
-        if cur_offset != file_meta.content_idx:
-            raise RuntimeError("File offset mismatch. Got %d, expected %d" % (cur_offset, file_meta.content_idx))
+        buffer.seek(file_meta.content_idx)
         _write_file_contents(file_meta, buffer, xor_mask=xor_mask, outdir=outdir)
 
 

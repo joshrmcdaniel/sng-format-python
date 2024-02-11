@@ -23,19 +23,22 @@ def write_header(file: io.FileIO, version: int, xor_mask: bytes) -> None:
 
 
 def write_file_meta(file: io.FileIO, file_meta_array: List[SngFileMetadata]) -> None:
-    filemeta_buf = struct.pack('<Q', len(file_meta_array))
-
+    calcd_size = struct.calcsize('<Q')
+    print(file_meta_array)
     for file_meta in file_meta_array:
         filename_len = len(file_meta.filename)
-        filemeta_buf += struct.pack('<B', filename_len)
+        calcd_size += struct.calcsize("<B") + struct.calcsize(f"<{filename_len}s") + struct.calcsize("<Q")*2
+    file.write(struct.pack('<Q', calcd_size))
+    file.write(struct.pack('<Q', len(file_meta_array)))
+    fileoffset = file.tell() + calcd_size
+    for file_meta in file_meta_array:
+        filename_len = len(file_meta.filename)
+        file.write(struct.pack('<B', filename_len))
         filename_packed = struct.pack(f"<{filename_len}s", file_meta.filename.encode('utf-8'))
-        filemeta_buf += filename_packed
-        
-        filemeta_buf += struct.pack("<Q", file_meta.content_len)
-        filemeta_buf += struct.pack("<Q", file_meta.content_idx)
-    
-    file.write(struct.pack('<Q', len(filemeta_buf)))
-    file.write(filemeta_buf)
+        file.write(filename_packed)
+        file.write(struct.pack("<Q", file_meta.content_len))
+        file.write(struct.pack("<Q", fileoffset))
+        fileoffset += file_meta.content_len
 
 
 def write_metadata(file: io.FileIO, metadata: SngMetadataInfo) -> None:
@@ -62,6 +65,8 @@ def write_file_data(out: io.FileIO, file_meta_array: List[Tuple[str, SngFileMeta
 
     for filename, file_metadata in file_meta_array:
         amt_read = 0
+        print(file_metadata.filename)
+        print(out.tell())
         with open(filename, 'rb') as f:
             while file_metadata.content_len > amt_read:
                 chunk_size = 1024 if file_metadata.content_len - amt_read > 1023 else file_metadata.content_len - amt_read
