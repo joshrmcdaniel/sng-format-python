@@ -215,6 +215,7 @@ def gather_files_from_directory(
     Args:
         directory (os.PathLike): The directory to scan for files.
         offset (int): The initial offset where file data will start in the SNG file.
+        allow_nonsng_files (bool): Allow encoding of files not allowed by the sng standard.
 
     Returns:
         List[Tuple[str, SngFileMetadata]]: A list of tuples containing file paths and their corresponding metadata objects.

@@ -217,7 +217,7 @@ def write_file_contents(
     file_meta_array: List[SngFileMetadata],
     buffer: BufferedReader,
     *,
-    allow_nonsng_files: bool= False,
+    allow_nonsng_files: bool,
     xor_mask: bytes,
     outdir: os.PathLike,
 ):
@@ -229,7 +229,7 @@ def write_file_contents(
     Args:
         file_meta_array (List[SngFileMetadata]): List of file metadata objects.
         buffer (BufferedReader): The input buffer from which to read the file contents.
-        allow_nonsng_files (bool, optional): Allow decoding of files not allowed by the sng standard. Defaults to False.
+        allow_nonsng_files (bool): Allow decoding of files not allowed by the sng standard.
         xor_mask (bytes): The XOR mask to apply for decryption.
         outdir (os.PathLike): The output directory where files will be written.
 
