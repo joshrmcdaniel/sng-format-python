@@ -8,7 +8,7 @@ from io import BufferedWriter
 from typing import List, Optional, Tuple
 
 
-from .common import SNG_RESERVED_FILES, mask, _with_endian, _valid_sng_file, SngFileMetadata, SngMetadataInfo, StructTypes
+from .common import SNG_RESERVED_FILES, mask, _with_endian, _valid_sng_file, _illegal_filename, SngFileMetadata, SngMetadataInfo, StructTypes
 
 
 s = StructTypes
@@ -252,6 +252,9 @@ def gather_files_from_directory(
     current_index = offset
 
     for filename in os.listdir(directory):
+        if _illegal_filename(filename):
+            logger.warn("Illegal filename: %s. Skipping", filename)
+            continue
         if not _valid_sng_file(filename):
             if filename in SNG_RESERVED_FILES:
                 logger.debug("%s is reserved, skipping", filename)

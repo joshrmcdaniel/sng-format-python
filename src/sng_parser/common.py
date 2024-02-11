@@ -2,7 +2,7 @@ import struct
 
 from enum import Enum
 from io import BufferedReader
-from typing import Final, List, NamedTuple, TypedDict, Tuple
+from typing import Final, NamedTuple, TypedDict, Tuple
 
 
 def mask(data: bytes, xor_mask: bytes) -> bytearray:
@@ -108,6 +108,43 @@ SNG_VIDEO_FILES: Final = {"video"}
 SNG_VIDEO_EXT: Final = {"mp4", "avi", "webm", "vp8", "ogv", "mpeg"}
 
 
+SNG_ILLEGAL_NAMING: Final = {
+    '<',
+    '>',
+    ':',
+    '"',
+    '/',
+    "\\",
+    '|',
+    '?'
+    '*',
+    '..',
+    'CON',
+    'PRN',
+    'AUX',
+    'NUL',
+    'COM0',
+    'COM1',
+    'COM2',
+    'COM3',
+    'COM4',
+    'COM5',
+    'COM6',
+    'COM7',
+    'COM8',
+    'COM9',
+    'LPT0',
+    'LPT1',
+    'LPT2',
+    'LPT3',
+    'LPT4',
+    'LPT5',
+    'LPT6',
+    'LPT7',
+    'LPT8',
+    'LPT9'
+}
+
 def _with_endian(*args: Tuple[StructTypes | int]):
     """
     Constructs a format string for struct operations that includes the specified
@@ -137,8 +174,18 @@ def _valid_audio_file(filename: str, ext: str) -> bool:
     return filename in SNG_AUDIO_FILES and ext in SNG_AUDIO_EXT
 
 
+def _illegal_filename(file: str) -> bool:
+    file = file.upper()
+    if file.endswith('.') or file.endswith(' '):
+        return True
+    if any(ord(x) < 31 for x in file):
+        return True
+    file = file.upper()
+    return any(ilgl_name.upper() in file for ilgl_name in SNG_ILLEGAL_NAMING)
+
+
 def _valid_sng_file(file: str) -> bool:
-    filename, ext = file.split(".")
+    filename, ext = file.rsplit(".", 1)
     if file in SNG_RESERVED_FILES:
         return False
     return (

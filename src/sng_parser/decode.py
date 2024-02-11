@@ -18,7 +18,8 @@ from .common import (
     SngHeader,
     StructTypes,
     calc_and_read_buf,
-    _valid_sng_file
+    _valid_sng_file,
+    _illegal_filename
 )
 
 s = StructTypes
@@ -253,6 +254,9 @@ def write_file_contents(
         )
 
     for file_meta in file_meta_array:
+        if _illegal_filename(file_meta.filename):
+            logger.warn("Illegal filename: %s. Skipping", file_meta.filename)
+            continue
         if not _valid_sng_file(file_meta.filename):
             logger.warning("Found encoded file not set by the sng standard: %s", file_meta.filename)
             if not allow_nonsng_files:
