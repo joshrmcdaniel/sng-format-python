@@ -1,52 +1,87 @@
 import logging
 import os
-import shutil
 import struct
 from io import BufferedReader
 from pathlib import Path
-import tempfile
 
 
 from typing import List, Optional, NoReturn, Tuple
 
 from configparser import ConfigParser
 
-from .common import mask, SngFileMetadata, SngMetadataInfo, calc_and_unpack, SngHeader, calc_and_read_buf
-from struct import calcsize
+from .common import (
+    mask,
+    _with_endian,
+    SngFileMetadata,
+    SngMetadataInfo,
+    calc_and_unpack,
+    SngHeader,
+    StructTypes,
+    calc_and_read_buf,
+)
 
+s = StructTypes
 logger = logging.getLogger(__package__)
 
+
 def read_sng_header(buffer: BufferedReader) -> SngHeader:
+    """
+    Reads the header from an SNG file buffer and returns an SngHeader object.
+
+    The header includes the file identifier, version, and an XOR mask used for decryption.
+
+    Args:
+        buffer (BufferedReader): The input buffer from which to read the SNG header.
+
+    Returns:
+        SngHeader: An object containing the header information.
+    """
     xor_mask: bytes
     version: int
     file_identifier: bytes
-    file_identifier, version, xor_mask = calc_and_unpack("<6sI16s", buffer)
+    file_identifier, version, xor_mask = calc_and_unpack(
+        _with_endian(6, s.CHAR, s.UINT, 16, s.CHAR), buffer
+    )
     return SngHeader(file_identifier, version, xor_mask)
 
 
 def read_filedata(buffer: BufferedReader) -> Tuple[SngFileMetadata, int]:
+    """
+    Reads the metadata for a single file from the buffer and returns the metadata along with the amount of data read.
+
+    The file metadata includes the filename, its content length, and its offset within the SNG file.
+
+    Args:
+        buffer (BufferedReader): The input buffer from which to read the file metadata.
+
+    Returns:
+        Tuple[SngFileMetadata, int]: A tuple containing the file metadata and the total bytes read from the buffer.
+    """
     logger.debug("Retrieving file metadata")
     amt_read: int = 0
-    
+
     logger.debug("Reading filename length")
-    read_size, content = calc_and_read_buf("<B", buffer)
+    fmt = _with_endian(s.UBYTE)
+    read_size, content = calc_and_read_buf(fmt, buffer)
     amt_read += read_size
-    filename_len: int = struct.unpack("<B", content)[0]
+    filename_len: int = struct.unpack(fmt, content)[0]
     logger.debug("Filename length: %d (bytes: %d)", filename_len, read_size)
-    
+
     logger.debug("Reading filename string")
-    read_size, content = calc_and_read_buf(f"<{filename_len}s", buffer)
+    fmt = _with_endian(filename_len, s.CHAR)
+    read_size, content = calc_and_read_buf(fmt, buffer)
     amt_read += read_size
-    filename: str = struct.unpack(f"<{filename_len}s", content)[0].decode()
+    filename: str = struct.unpack(fmt, content)[0].decode()
     logger.debug("Filename: %s (bytes: %d)", filename, read_size)
 
     contents_len: int
     contents_index: int
 
     logger.debug("Reading file content offset and file content size")
-    read_size, content = calc_and_read_buf("<QQ", buffer)
+    fmt = _with_endian(s.ULONGLONG, s.ULONGLONG)
+    read_size, content = calc_and_read_buf(fmt, buffer)
     amt_read += read_size
-    contents_len, contents_index = struct.unpack("<QQ", content)
+    contents_len, contents_index = struct.unpack(fmt, content)
     logger.debug("File content size: %d (offset %d)", contents_len, contents_index)
 
     metadata = SngFileMetadata(filename, contents_len, contents_index)
@@ -57,93 +92,160 @@ def read_filedata(buffer: BufferedReader) -> Tuple[SngFileMetadata, int]:
 
 
 def decode_file_metadata(buffer: BufferedReader) -> List[SngFileMetadata]:
+    """
+    Decodes and returns a list of SngFileMetadata objects from the given buffer.
+
+    Reads the overall length of the file metadata section, the count of files, and then iterates to read each file's metadata.
+
+    Args:
+        buffer (BufferedReader): The input buffer from which to decode the file metadata.
+
+    Returns:
+        List[SngFileMetadata]: A list of file metadata objects.
+    """
     logger.info("Decoding sng file content metadata")
     amt_read: int = 0
-    
+
     logger.debug("Reading file metadata")
-    file_meta_len: int = calc_and_unpack("<Q", buffer)[0]
+    file_meta_len: int = calc_and_unpack(_with_endian(s.ULONGLONG), buffer)[0]
     logger.debug("File metadata content length: %d", file_meta_len)
-    
+
     logger.debug("Reading file count")
-    bytes_read, content = calc_and_read_buf("<Q", buffer)
+    bytes_read, content = calc_and_read_buf(_with_endian(s.ULONGLONG), buffer)
     amt_read += bytes_read
-    file_count: int = struct.unpack("<Q", content)[0]
+    file_count: int = struct.unpack(_with_endian(s.ULONGLONG), content)[0]
     logger.debug("File count: %d (bytes: %d)", file_count, bytes_read)
 
     file_meta_array: List[SngFileMetadata] = []
     for _ in range(file_count):
         file_meta, bytes_read = read_filedata(buffer)
         amt_read += bytes_read
-        logger.info("Retrieved metadata of %s (offset: %d, content length: %d)", file_meta.filename, file_meta.content_idx, file_meta.content_len)
+        logger.info(
+            "Retrieved metadata of %s (offset: %d, content length: %d)",
+            file_meta.filename,
+            file_meta.content_idx,
+            file_meta.content_len,
+        )
         file_meta_array.append(file_meta)
     if file_meta_len != amt_read:
-        raise RuntimeError("File metadata read mismatch. Expected %d, read %d" % (file_meta_len, amt_read))
+        raise RuntimeError(
+            "File metadata read mismatch. Expected %d, read %d"
+            % (file_meta_len, amt_read)
+        )
     return file_meta_array
 
 
 def decode_metadata(sng_buffer: BufferedReader) -> SngMetadataInfo:
+    """
+    Decodes the key-value pairs of metadata from the SNG buffer and returns them as a dictionary.
+
+    Reads the total length of the metadata section and the number of metadata entries, then decodes each key-value pair.
+
+    Args:
+        sng_buffer (BufferedReader): The input buffer from which to decode the metadata.
+
+    Returns:
+        SngMetadataInfo: A dictionary containing the metadata key-value pairs.
+    """
     logger.info("Decoding sng metadata")
     total_bytes: int = 0
-    
+
     logger.debug("Reading metadata content length")
-    metadata_len: int = calc_and_unpack("<Q", sng_buffer)[0]
+    metadata_len: int = calc_and_unpack(_with_endian(s.ULONGLONG), sng_buffer)[0]
     logger.debug("Metadata content length: %d", metadata_len)
 
     logger.debug("Reading song metadata count")
-    bytes_read, content = calc_and_read_buf("<Q", sng_buffer)
+    bytes_read, content = calc_and_read_buf(_with_endian(s.ULONGLONG), sng_buffer)
     total_bytes += bytes_read
-    metadata_count: int = struct.unpack("<Q", content)[0]
+    metadata_count: int = struct.unpack(_with_endian(s.ULONGLONG), content)[0]
     logger.debug("Metadata entries: %d (bytes: %d)", metadata_count, bytes_read)
 
     metadata = {}
 
     for i in range(metadata_count):
-        logger.debug("Retrieving metadata key size of entry %d", i+1)
-        bytes_read, content = calc_and_read_buf("<I", sng_buffer)
+        logger.debug("Retrieving metadata key size of entry %d", i + 1)
+        fmt = _with_endian(s.UINT)
+        bytes_read, content = calc_and_read_buf(fmt, sng_buffer)
         total_bytes += bytes_read
-        key_len: int = struct.unpack("<I", content)[0]
+        key_len: int = struct.unpack(fmt, content)[0]
         logger.debug("Metadata key size: %d (bytes: %d)", key_len, bytes_read)
 
-        logger.debug("Retrieving metadata key %d", i+1)
-        bytes_read, content = calc_and_read_buf(f"<{key_len}s", sng_buffer)
+        logger.debug("Retrieving metadata key %d", i + 1)
+        fmt = _with_endian(key_len, s.CHAR)
+        bytes_read, content = calc_and_read_buf(fmt, sng_buffer)
         total_bytes += bytes_read
-        key: str = struct.unpack(f"<{key_len}s", content)[0].decode()
-        logger.debug("Metadata key %d: '%s' (bytes: %d)",i+1, key, bytes_read)
-        
+        key: str = struct.unpack(fmt, content)[0].decode()
+        logger.debug("Metadata key %d: '%s' (bytes: %d)", i + 1, key, bytes_read)
+
         logger.debug("Retriveing metadata value size of '%s'", key)
-        bytes_read, content = calc_and_read_buf(f"<I", sng_buffer)
+        fmt = _with_endian(s.UINT)
+        bytes_read, content = calc_and_read_buf(fmt, sng_buffer)
         total_bytes += bytes_read
-        value_len: int = struct.unpack("<I", content)[0]
+        value_len: int = struct.unpack(fmt, content)[0]
         logger.debug("Metadata value size: %d (bytes: %d)", value_len, bytes_read)
 
         logger.debug("Retriveing metadata value of '%s'", key)
-        bytes_read, content = calc_and_read_buf(f"<{value_len}s", sng_buffer)
+        fmt = _with_endian(value_len, s.CHAR)
+        bytes_read, content = calc_and_read_buf(fmt, sng_buffer)
         total_bytes += bytes_read
-        value: str = struct.unpack(f"<{value_len}s", content)[0].decode()
-        logger.debug("Metadata value for key '%s': '%s' (bytes: %d)", key, value, bytes_read)
+        value: str = struct.unpack(fmt, content)[0].decode()
+        logger.debug(
+            "Metadata value for key '%s': '%s' (bytes: %d)", key, value, bytes_read
+        )
 
         metadata[key] = value
 
     if total_bytes != metadata_len:
-        raise RuntimeError("Metadata read mismatch. Expected %d, read %d" % (metadata_len, total_bytes))
+        raise RuntimeError(
+            "Metadata read mismatch. Expected %d, read %d" % (metadata_len, total_bytes)
+        )
 
     metadata_attrs_read = len(metadata)
     if metadata_attrs_read != metadata_count:
-        raise RuntimeError("Metadata count mismatch. Expected %d, found %d" % (metadata_count, metadata_attrs_read))
+        raise RuntimeError(
+            "Metadata count mismatch. Expected %d, found %d"
+            % (metadata_count, metadata_attrs_read)
+        )
     return metadata
 
 
-def write_file_contents(file_meta_array: List[SngFileMetadata], buffer: BufferedReader, *, xor_mask: bytes, outdir: os.PathLike):
+def write_file_contents(
+    file_meta_array: List[SngFileMetadata],
+    buffer: BufferedReader,
+    *,
+    xor_mask: bytes,
+    outdir: os.PathLike,
+):
+    """
+    Writes the actual file contents for each file metadata in the list to the specified output directory.
+
+    Applies the XOR mask if provided to decrypt the data before writing.
+
+    Args:
+        file_meta_array (List[SngFileMetadata]): List of file metadata objects.
+        buffer (BufferedReader): The input buffer from which to read the file contents.
+        xor_mask (bytes): The XOR mask to apply for decryption.
+        outdir (os.PathLike): The output directory where files will be written.
+
+    Returns:
+        None
+    """
     logger.info("Writing decoded sng file to %s", outdir)
 
-    file_data_len: int = calc_and_unpack("<Q", buffer)[0]
+    file_data_len: int = calc_and_unpack(_with_endian(s.ULONGLONG), buffer)[0]
+    logger.debug("Content size of the files: %d", file_data_len)
+    logger.debug(
+        "Verifying file section content size matches file metadata content size"
+    )
     file_meta_content_size: int = sum(map(lambda x: x.content_len, file_meta_array))
-    print(file_data_len)
-    print(file_meta_content_size)
+    logger.debug("File metadata content size total: %d", file_meta_content_size)
 
     if file_meta_content_size != file_data_len:
-        raise RuntimeError("File content size mismatch. Expected %d, got %d)" % ( file_data_len, file_meta_content_size))
-    
+        raise RuntimeError(
+            "File content size mismatch. Expected %d, got %d)"
+            % (file_data_len, file_meta_content_size)
+        )
+
     for file_meta in file_meta_array:
         buffer.seek(file_meta.content_idx)
         _write_file_contents(file_meta, buffer, xor_mask=xor_mask, outdir=outdir)
@@ -154,24 +256,55 @@ def _write_file_contents(
     buffer: BufferedReader,
     *,
     xor_mask: bytes,
-    outdir: os.PathLike
-    ) -> None:
+    outdir: os.PathLike,
+) -> None:
+    """
+    Internal function.
+    Writes the contents of a single file based on the provided metadata and XOR mask
+    to the specified output directory.
+
+    Args:
+        file_metadata (SngFileMetadata): The metadata for the file to write.
+        buffer (BufferedReader): The input buffer from which to read the file contents.
+        xor_mask (bytes): The XOR mask to apply for decryption.
+        outdir (os.PathLike): The output directory where the file will be written.
+
+    Returns:
+        None
+    """
     amt_read = 0
     file_path = os.path.join(outdir, file_metadata.filename)
     logger.debug("Writing file %s", file_metadata.filename)
-    with open(file_path, 'wb') as out:
+    with open(file_path, "wb") as out:
         while file_metadata.content_len > amt_read:
-            chunk_size = 1024 if file_metadata.content_len - amt_read > 1023 else file_metadata.content_len - amt_read
+            chunk_size = (
+                1024
+                if file_metadata.content_len - amt_read > 1023
+                else file_metadata.content_len - amt_read
+            )
             amt_read += chunk_size
             buf = buffer.read(chunk_size)
             out.write(mask(buf, xor_mask))
         if file_metadata.content_len != amt_read:
-            raise RuntimeError("File write mismatch. Expected %d, wrote %d" % (file_metadata.content_len, amt_read))
-    
-    logger.debug('Wrote %s in %s', file_metadata.filename, outdir)
+            raise RuntimeError(
+                "File write mismatch. Expected %d, wrote %d"
+                % (file_metadata.content_len, amt_read)
+            )
+
+    logger.debug("Wrote %s in %s", file_metadata.filename, outdir)
 
 
-def _as_path_obj(path: str, *, validate: bool=True) -> Path | NoReturn:
+def _as_path_obj(path: str, *, validate: bool = True) -> Path | NoReturn:
+    """
+    Converts a given path string to a Path object and optionally validates its existence.
+
+    Args:
+        path (str): The file or directory path as a string.
+        validate (bool, optional): If True, raises an error if the path does not exist. Defaults to True.
+
+    Returns:
+        Path | NoReturn: The Path object corresponding to the given path string.
+    """
     path = Path(path)
     if validate:
         _validate_path(path)
@@ -179,16 +312,38 @@ def _as_path_obj(path: str, *, validate: bool=True) -> Path | NoReturn:
 
 
 def _validate_path(path: os.PathLike) -> None | NoReturn:
+    """
+    Validates the existence of the given path.
+
+    Args:
+        path (os.PathLike): The path to validate.
+
+    Returns:
+        None | NoReturn: None if the path exists, raises FileNotFoundError otherwise.
+    """
     if not os.path.exists(path):
-        raise RuntimeError("No file located at %s" % path)
+        raise FileNotFoundError("No file located at %s" % path)
 
 
 def decode_sng(
-        sng_file: os.PathLike | str | BufferedReader,
-        *,
-        outdir: Optional[os.PathLike | str] = None,
-        sng_dir: Optional[os.PathLike | str] = None
-        ) -> None | NoReturn:
+    sng_file: os.PathLike | str | BufferedReader,
+    *,
+    outdir: Optional[os.PathLike | str] = None,
+    sng_dir: Optional[os.PathLike | str] = None,
+    overwrite: bool = False,
+) -> None | NoReturn:
+    """
+    Decodes an SNG file and writes its contents, including metadata and file data, to the specified output directory.
+
+    Args:
+        sng_file (os.PathLike | str | BufferedReader): The SNG file or buffer to decode.
+        outdir (Optional[os.PathLike | str], optional): The base output directory for decoded content. Defaults to the current directory.
+        sng_dir (Optional[os.PathLike | str], optional): The specific directory within outdir to write the decoded content. Generated from metadata if not specified.
+        overwrite (bool, optional): If True, existing files or directories will be overwritten. Defaults to False.
+
+    Returns:
+        None | NoReturn: None on success, raises an exception on failure.
+    """
     path_passed = not isinstance(sng_file, BufferedReader)
     if outdir is None:
         outdir = os.curdir
@@ -196,42 +351,49 @@ def decode_sng(
         outdir = _as_path_obj(outdir, validate=False)
     if isinstance(sng_file, str):
         sng_file = _as_path_obj(sng_file)
-    
+
     if isinstance(sng_file, os.PathLike):
         _validate_path(sng_file)
-        sng_file = open(sng_file, 'rb')
+        sng_file = open(sng_file, "rb")
 
-    header= read_sng_header(sng_file)
+    header = read_sng_header(sng_file)
 
     if header.file_identifier.decode() != "SNGPKG":
-        raise ValueError("Invalid file identifier")
-    
+        raise TypeError("Invalid file identifier")
+
     metadata = decode_metadata(sng_file)
     if sng_dir is None:
         sng_dir = create_dirname(metadata)
     outdir = os.path.join(outdir, sng_dir)
-    if os.path.exists(outdir):
-        raise RuntimeError("Song already exists at %s" % outdir)
-    
-    tmp_dir = tempfile.mkdtemp()
-    write_metadata(metadata, tmp_dir)
+    try:
+        os.makedirs(outdir, exist_ok=overwrite)
+    except FileExistsError as fe:
+        fe.message = "Song already exists at %s" % outdir
+        raise fe
+
+    write_metadata(metadata, outdir)
 
     file_meta_array: List[SngFileMetadata] = decode_file_metadata(sng_file)
-    write_file_contents(file_meta_array, sng_file, xor_mask=header.xor_mask, outdir=tmp_dir)
+    write_file_contents(
+        file_meta_array, sng_file, xor_mask=header.xor_mask, outdir=outdir
+    )
 
     if path_passed:
         sng_file.close()
-
-    os.makedirs(outdir)
-    files_to_move = list(map(lambda x: x.filename, file_meta_array))
-    files_to_move.append("song.ini")
-    for filename in files_to_move:
-        shutil.move(os.path.join(tmp_dir, filename), outdir)
 
     logging.info("Wrote sng file output in %s", outdir)
 
 
 def create_dirname(metadata: SngFileMetadata) -> str:
+    """
+    Creates a directory name from the given file metadata, using artist, song name, and charter info.
+
+    Args:
+        metadata (SngFileMetadata): The metadata from which to construct the directory name.
+
+    Returns:
+        str: The constructed directory name.
+    """
     artist = metadata.get("artist", "Unknown Artist")
     song = metadata.get("name", "Unknown Song")
     charter = metadata.get("charter", "Unknown Charter")
@@ -239,11 +401,21 @@ def create_dirname(metadata: SngFileMetadata) -> str:
 
 
 def write_metadata(metadata: SngMetadataInfo, outdir: os.PathLike) -> None:
-    print("Writing metadata to %s" % outdir)
+    """
+    Writes the given metadata as an INI file ('song.ini') in the specified output directory.
+
+    Args:
+        metadata (SngMetadataInfo): The metadata to write to the file.
+        outdir (os.PathLike): The directory in which to create the 'song.ini' file.
+
+    Returns:
+        None
+    """
+    logger.info("Writing metadata to %s" % outdir)
     cfg = ConfigParser()
     cfg.add_section("Song")
     cfg["Song"] = metadata
     with open(os.path.join(outdir, "song.ini"), "w") as f:
         cfg.write(f)
-    
-    logger.debug('Wrote song.ini in %s', outdir)
+
+    logger.debug("Wrote song.ini in %s", outdir)

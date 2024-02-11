@@ -1,17 +1,14 @@
 import logging
 
 from .common import SngFileMetadata, SngMetadataInfo, SngHeader
-from .decode import decode_sng, decode_metadata
-from .encode import to_sng_file
-
-logger = logging.getLogger(__package__)
+from .decode import decode_sng
+from .encode import encode_sng
 
 __all__ = [
-    "convert_sng_file",
+    "encode_sng",
+    "decode_sng",
     "parse_sng_file",
     "SngFileMetadata",
     "SngHeader",
     "SngMetadataInfo",
-    "to_sng_file",
-    "write_parsed_sng",
 ]
