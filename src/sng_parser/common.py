@@ -2,7 +2,7 @@ import struct
 
 from enum import Enum
 from io import BufferedReader
-from typing import NamedTuple, TypedDict, Tuple
+from typing import Final, List, NamedTuple, TypedDict, Tuple
 
 
 def mask(data: bytes, xor_mask: bytes) -> bytearray:
@@ -75,6 +75,39 @@ class StructTypes(Enum):
     CHAR = "s"  # Single character
 
 
+SNG_RESERVED_FILES: Final = {"song.ini"}
+
+SNG_NOTES_FILES: Final = { 'notes.chart', 'notes.mid' }
+
+SNG_AUDIO_FILES: Final = {
+    "guitar",
+    "bass",
+    "rhythm",
+    "vocals",
+    "vocals_1",
+    "vocals_2",
+    "drums",
+    "drums_1",
+    "drums_2",
+    "drums_3",
+    "drums_4",
+    "keys",
+    "song",
+    "crowd",
+    "preview",
+}
+
+SNG_AUDIO_EXT: Final = {"mp3", "ogg", "opus", "wav"}
+
+SNG_IMG_FILES: Final = {"album", "background", "highway"}
+
+SNG_IMG_EXT: Final = {"png", "jpg", "jpeg"}
+
+SNG_VIDEO_FILES: Final = {"video"}
+
+SNG_VIDEO_EXT: Final = {"mp4", "avi", "webm", "vp8", "ogv", "mpeg"}
+
+
 def _with_endian(*args: Tuple[StructTypes | int]):
     """
     Constructs a format string for struct operations that includes the specified
@@ -89,6 +122,30 @@ def _with_endian(*args: Tuple[StructTypes | int]):
     """
     return StructTypes.ENDIAN.value + "".join(
         map(lambda x: x.value if isinstance(x, StructTypes) else str(x), args)
+    )
+
+
+def _valid_img_file(filename: str, ext: str) -> bool:
+    return filename in SNG_IMG_FILES and ext in SNG_IMG_EXT
+
+
+def _valid_video_file(filename: str, ext: str) -> bool:
+    return filename in SNG_VIDEO_FILES and ext in SNG_VIDEO_EXT
+
+
+def _valid_audio_file(filename: str, ext: str) -> bool:
+    return filename in SNG_AUDIO_FILES and ext in SNG_AUDIO_EXT
+
+
+def _valid_sng_file(file: str) -> bool:
+    filename, ext = file.split(".")
+    if file in SNG_RESERVED_FILES:
+        return False
+    return (
+        _valid_audio_file(filename, ext)
+        or _valid_img_file(filename, ext)
+        or _valid_video_file(filename, ext)
+        or file in SNG_NOTES_FILES
     )
 
 

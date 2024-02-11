@@ -18,6 +18,7 @@ from .common import (
     SngHeader,
     StructTypes,
     calc_and_read_buf,
+    _valid_sng_file
 )
 
 s = StructTypes
@@ -120,7 +121,7 @@ def decode_file_metadata(buffer: BufferedReader) -> List[SngFileMetadata]:
     for _ in range(file_count):
         file_meta, bytes_read = decode_filedata(buffer)
         amt_read += bytes_read
-        logger.info(
+        logger.debug(
             "Retrieved metadata of %s (offset: %d, content length: %d)",
             file_meta.filename,
             file_meta.content_idx,
@@ -132,6 +133,9 @@ def decode_file_metadata(buffer: BufferedReader) -> List[SngFileMetadata]:
             "File metadata read mismatch. Expected %d, read %d"
             % (file_meta_len, amt_read)
         )
+
+    logger.info("Decoded file metadata for %d files", len(file_meta_array))
+
     return file_meta_array
 
 
@@ -213,6 +217,7 @@ def write_file_contents(
     file_meta_array: List[SngFileMetadata],
     buffer: BufferedReader,
     *,
+    allow_nonsng_files: bool= False,
     xor_mask: bytes,
     outdir: os.PathLike,
 ):
@@ -224,6 +229,7 @@ def write_file_contents(
     Args:
         file_meta_array (List[SngFileMetadata]): List of file metadata objects.
         buffer (BufferedReader): The input buffer from which to read the file contents.
+        allow_nonsng_files (bool, optional): Allow decoding of files not allowed by the sng standard. Defaults to False.
         xor_mask (bytes): The XOR mask to apply for decryption.
         outdir (os.PathLike): The output directory where files will be written.
 
@@ -247,6 +253,13 @@ def write_file_contents(
         )
 
     for file_meta in file_meta_array:
+        if not _valid_sng_file(file_meta.filename):
+            logger.warning("Found encoded file not set by the sng standard: %s", file_meta.filename)
+            if not allow_nonsng_files:
+                logger.warning("Allowing non-sng files is set to False, skipping file %s.", file_meta.filename)
+                continue
+            logger.warning("Allowing non-sng files is set to True, decoding file %s.", file_meta.filename)
+        
         buffer.seek(file_meta.content_idx)
         _write_file_contents(file_meta, buffer, xor_mask=xor_mask, outdir=outdir)
 
@@ -329,6 +342,7 @@ def decode_sng(
     sng_file: os.PathLike | str | BufferedReader,
     *,
     outdir: Optional[os.PathLike | str] = None,
+    allow_nonsng_files: bool= False,
     sng_dir: Optional[os.PathLike | str] = None,
     overwrite: bool = False,
 ) -> None | NoReturn:
@@ -338,6 +352,7 @@ def decode_sng(
     Args:
         sng_file (os.PathLike | str | BufferedReader): The SNG file or buffer to decode.
         outdir (Optional[os.PathLike | str], optional): The base output directory for decoded content. Defaults to the current directory.
+        allow_nonsng_files (bool, optional): Allow decoding of files not allowed by the sng standard. Defaults to False.
         sng_dir (Optional[os.PathLike | str], optional): The specific directory within outdir to write the decoded content. Generated from metadata if not specified.
         overwrite (bool, optional): If True, existing files or directories will be overwritten. Defaults to False.
 
@@ -375,13 +390,13 @@ def decode_sng(
 
     file_meta_array: List[SngFileMetadata] = decode_file_metadata(sng_file)
     write_file_contents(
-        file_meta_array, sng_file, xor_mask=header.xor_mask, outdir=outdir
+        file_meta_array, sng_file, xor_mask=header.xor_mask, outdir=outdir, allow_nonsng_files=allow_nonsng_files
     )
 
     if path_passed:
         sng_file.close()
 
-    logging.info("Wrote sng file output in %s", outdir)
+    logger.info("Wrote sng file output in %s", outdir)
 
 
 def create_dirname(metadata: SngFileMetadata) -> str:
