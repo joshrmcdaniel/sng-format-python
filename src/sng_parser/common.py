@@ -44,6 +44,7 @@ def calc_and_unpack(fmt: str, buf: BufferedReader) -> tuple:
     buffer = buf.read(read_size)
     return struct.unpack_from(fmt, buffer)
 
+
 def calc_and_read_buf(fmt: str, buf: BufferedReader) -> Tuple[int, bytes]:
     """
     Calculates the size required for the format `fmt`, reads that many bytes
@@ -66,11 +67,12 @@ class StructTypes(Enum):
     ensuring consistent endianness and providing easy
     access to format characters for common data types.
     """
-    ENDIAN = "<" # Little-endian
-    UINT = "I" # Unsigned int
-    ULONGLONG = "Q" # Unsigned long long
-    UBYTE = "B" # Unsigned byte
-    CHAR = "s" # Single character
+
+    ENDIAN = "<"  # Little-endian
+    UINT = "I"  # Unsigned int
+    ULONGLONG = "Q"  # Unsigned long long
+    UBYTE = "B"  # Unsigned byte
+    CHAR = "s"  # Single character
 
 
 def _with_endian(*args: Tuple[StructTypes | int]):
@@ -85,7 +87,9 @@ def _with_endian(*args: Tuple[StructTypes | int]):
     Returns:
         str: The format string with endian prefix.
     """
-    return StructTypes.ENDIAN.value+''.join(map(lambda x: x.value if isinstance(x, StructTypes) else str(x), args))
+    return StructTypes.ENDIAN.value + "".join(
+        map(lambda x: x.value if isinstance(x, StructTypes) else str(x), args)
+    )
 
 
 class SngFileMetadata(NamedTuple):
@@ -93,6 +97,7 @@ class SngFileMetadata(NamedTuple):
     Represents the metadata for a file within an SNG package, including its name,
     content length, and content index (offset within the SNG file).
     """
+
     filename: str
     content_len: int
     content_idx: int
@@ -103,6 +108,7 @@ class SngHeader(NamedTuple):
     Represents the header information of an SNG file, including the file identifier,
     version, and an XOR mask for encryption/decryption.
     """
+
     file_identifier: bytes
     version: int
     xor_mask: bytes
@@ -113,6 +119,7 @@ class SngMetadataInfo(TypedDict):
     A dictionary type that specifies the structure and expected types of metadata
     for an SNG file.
     """
+
     name: str
     artist: str
     album: str
