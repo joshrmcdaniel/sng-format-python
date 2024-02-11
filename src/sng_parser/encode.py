@@ -177,7 +177,7 @@ def encode_sng(
 
     Args:
         dir_to_encode (os.PathLike): The directory containing files to be encoded into the SNG package.
-        output_filename (os.PathLike, optional): The path to the output SNG file. Defaults to the md5 sum of the resulting encoding.
+        output_filename (os.PathLike, optional): The path to the output SNG file. Defaults to the md5 sum of the containing files of converted dir.
         allow_nonsng_files (bool, optional): Allow encoding of files not allowed by the sng standard. Defaults to False.
         overwrite (bool, optional): If True, existing files or directories will be overwritten. Defaults to False.
         version (int, optional): The version of the SNG format to use. Defaults to 1.
