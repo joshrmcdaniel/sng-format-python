@@ -232,6 +232,6 @@ def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
     ini_path = os.path.join(filedir, "song.ini")
     if not os.path.exists(ini_path):
         raise FileNotFoundError("song.ini not found in provided directory.")
-    with open() as f:
+    with open(ini_path) as f:
         cfg.read_file(f)
     return dict(cfg["Song"])

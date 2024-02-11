@@ -45,7 +45,7 @@ def read_sng_header(buffer: BufferedReader) -> SngHeader:
     return SngHeader(file_identifier, version, xor_mask)
 
 
-def read_filedata(buffer: BufferedReader) -> Tuple[SngFileMetadata, int]:
+def decode_filedata(buffer: BufferedReader) -> Tuple[SngFileMetadata, int]:
     """
     Reads the metadata for a single file from the buffer and returns the metadata along with the amount of data read.
 
@@ -118,7 +118,7 @@ def decode_file_metadata(buffer: BufferedReader) -> List[SngFileMetadata]:
 
     file_meta_array: List[SngFileMetadata] = []
     for _ in range(file_count):
-        file_meta, bytes_read = read_filedata(buffer)
+        file_meta, bytes_read = decode_filedata(buffer)
         amt_read += bytes_read
         logger.info(
             "Retrieved metadata of %s (offset: %d, content length: %d)",
