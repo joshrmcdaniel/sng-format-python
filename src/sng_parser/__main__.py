@@ -42,7 +42,7 @@ def create_args() -> argparse.ArgumentParser:
         dest="log_level",
     )
     subparser = parser.add_subparsers(
-        title="action", metavar="{encode|decode}", description="Encode to or decode from an sng file. For futher usage, run %(prog)s {encode|decode} -h",
+        title="action", metavar="{encode|decode}", description="Encode to or decode from an sng file. For futher usage, run %(prog)s {encode|decode} -h", required=True
     )
     
 
@@ -126,7 +126,7 @@ def create_args() -> argparse.ArgumentParser:
     )
     
     decode.set_defaults(func=run_decode)
-    parser.usage = "\n"+encode.format_usage()[7:] + decode.format_usage()[7:]
+    parser.usage = "\n  "+encode.format_usage()[7:] + "  "+decode.format_usage()[7:]+ "\n"
     return parser
 
 
