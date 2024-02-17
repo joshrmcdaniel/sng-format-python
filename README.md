@@ -21,6 +21,56 @@ pip install -e .
 
 # Usage
 
+``` console
+foo@bar:~$ sng_parser -h
+usage: 
+sng_parser encode [-h] [-o path/to/encoded.sng] [-i] [-f] [-V sng_version] song_dir
+sng_parser decode [-h] [-o path/to/out/folder] [-i] [-d relative/to/out_dir] [-f] sng_file
+
+Decode/encode sng files
+
+options:
+  -h, --help       show this help message and exit
+  -v               Logging level to use, more log info is shown by adding more `v`'s
+
+action:
+  Encode to or decode from an sng file. For futher usage, run sng_parser {encode|decode} -h
+
+  {encode|decode}
+
+foo@bar:~$ sng_parser encode -h
+usage: sng_parser encode [-h] [-o path/to/encoded.sng] [-i] [-f] [-V sng_version] song_dir
+
+positional arguments:
+  song_dir              Directory to encode in the sng format
+
+options:
+  -h, --help            show this help message and exit
+  -o path/to/encoded.sng, --out-file path/to/encoded.sng
+                        The output path of the SNG file. Defaults to the md5 sum of the containing files of the target dir.
+  -i, --ignore-nonsng-files
+                        Allow encoding of files not allowed by the sng standard. Default: True.
+  -f, --force           Overwrite existing files or directories. Default: False.
+  -V sng_version, --version sng_version
+                        sng format version to use.
+
+foo@bar:~$ sng_parser decode -h
+usage: sng_parser decode [-h] [-o path/to/out/folder] [-i] [-d relative/to/out_dir] [-f] sng_file
+
+positional arguments:
+  sng_file              Directory to encode in the sng format
+
+options:
+  -h, --help            show this help message and exit
+  -o path/to/out/folder, --out-dir path/to/out/folder
+                        The output directory of sng file's directory. Default: /your/working/dir (current working dir)
+  -i, --ignore-nonsng-files
+                        Allow decoding of files not allowed by the sng standard. Default: True
+  -d relative/to/out_dir, --sng-dir relative/to/out_dir
+                        The output directory containing the decoded sng file contents. Generated from metadata if not specified
+  -f, --force           Overwrite existing files or directories. Defaults: False
+
+```
 
 The only functions a user should use for deconding and encoding is `decode_sng`, and `encode_sng`. The other functions are internal helpers.
 

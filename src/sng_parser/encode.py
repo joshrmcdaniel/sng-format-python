@@ -8,7 +8,18 @@ from io import BufferedWriter
 from typing import List, Optional, Tuple
 
 
-from .common import SNG_RESERVED_FILES, mask, _with_endian, _validate_and_pack, _valid_sng_file, _illegal_filename, SngFileMetadata, SngMetadataInfo, StructTypes
+from .common import (
+    SNG_RESERVED_FILES,
+    mask,
+    _with_endian,
+    _fail_on_invalid_sng_ver,
+    _validate_and_pack,
+    _valid_sng_file,
+    _illegal_filename,
+    SngFileMetadata,
+    SngMetadataInfo,
+    StructTypes,
+)
 
 
 s = StructTypes
@@ -33,6 +44,7 @@ def write_header(file: BufferedWriter, version: int, xor_mask: bytes) -> None:
     """
     logger.info("Writing sng header")
     file.write(b"SNGPKG")
+    _fail_on_invalid_sng_ver(version)
     file.write(_validate_and_pack(_with_endian(s.UINT), version))
     file.write(xor_mask)
     logger.info("Wrote header")
@@ -111,17 +123,22 @@ def write_metadata(file: BufferedWriter, metadata: SngMetadataInfo) -> None:
     for key, val in metadata.items():
         key_len: int = len(key)
         key_len_packed = _validate_and_pack(_with_endian(s.UINT), key_len)
-        key: bytes = _validate_and_pack(_with_endian(key_len, s.CHAR), key.encode("utf-8"))
+        key: bytes = _validate_and_pack(
+            _with_endian(key_len, s.CHAR), key.encode("utf-8")
+        )
 
         value_len: int = len(val)
         value_len_packed: bytes = _validate_and_pack(_with_endian(s.UINT), value_len)
-        value: bytes = _validate_and_pack(_with_endian(value_len, s.CHAR), val.encode("utf-8"))
+        value: bytes = _validate_and_pack(
+            _with_endian(value_len, s.CHAR), val.encode("utf-8")
+        )
         metadata_content += key_len_packed + key + value_len_packed + value
 
     file.write(_validate_and_pack(_with_endian(s.ULONGLONG), len(metadata_content)))
     file.write(metadata_content)
 
     logger.info("Wrote song metadata")
+
 
 def write_file_data(
     out: BufferedWriter,
@@ -163,7 +180,7 @@ def encode_sng(
     dir_to_encode: os.PathLike,
     *,
     output_filename: Optional[os.PathLike] = None,
-    allow_nonsng_files: bool= False,
+    allow_nonsng_files: bool = False,
     overwrite: bool = False,
     version: int = 1,
     xor_mask: Optional[bytes] = None,
@@ -177,7 +194,7 @@ def encode_sng(
 
     Args:
         dir_to_encode (os.PathLike): The directory containing files to be encoded into the SNG package.
-        output_filename (os.PathLike, optional): The path to the output SNG file. Defaults to the md5 sum of the containing files of converted dir.
+        output_filename (os.PathLike, optional): The output path of the SNG file. Defaults to the md5 sum of the containing files of converted dir.
         allow_nonsng_files (bool, optional): Allow encoding of files not allowed by the sng standard. Defaults to False.
         overwrite (bool, optional): If True, existing files or directories will be overwritten. Defaults to False.
         version (int, optional): The version of the SNG format to use. Defaults to 1.
@@ -193,25 +210,31 @@ def encode_sng(
         metadata = read_file_meta(dir_to_encode)
     if xor_mask is None:
         xor_mask = os.urandom(16)
-    if (x:=len(xor_mask)) != 16:
-        raise ValueError("xor mask should be of length 16, found xor_mask of length %d" % x)
+    if (x := len(xor_mask)) != 16:
+        raise ValueError(
+            "xor mask should be of length 16, found xor_mask of length %d" % x
+        )
     if output_filename is None:
-        output_filename = create_sng_filename(dir_to_encode)+'.sng'
-    if not output_filename.endswith('.sng'):
-        output_filename += '.sng'
+        output_filename = create_sng_filename(dir_to_encode) + ".sng"
+    if not output_filename.endswith(".sng"):
+        output_filename += ".sng"
     if os.path.exists(output_filename) and not overwrite:
-        raise FileExistsError("Sng file exists: %s" % output_filename)
+        err = FileExistsError("Sng file exists: %s" % output_filename)
+        err.filename = output_filename
+        raise err
     with open(output_filename, "wb") as file:
         write_header(file, version, xor_mask)
         write_metadata(file, metadata)
-        file_meta_array = gather_files_from_directory(dir_to_encode, offset=file.tell(), allow_nonsng_files=allow_nonsng_files)
+        file_meta_array = gather_files_from_directory(
+            dir_to_encode, offset=file.tell(), allow_nonsng_files=allow_nonsng_files
+        )
         write_file_meta(file, list(map(lambda x: x[1], file_meta_array)))
         write_file_data(file, file_meta_array, xor_mask)
 
 
 def _get_file_md5(path: os.PathLike) -> str:
     filehash = hashlib.md5()
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         size = f.seek(0, os.SEEK_END)
         chunk_size = 1024
         f.seek(0)
@@ -227,10 +250,10 @@ def create_sng_filename(sng_dir: os.PathLike) -> str:
     filehash = hashlib.md5()
     for file_name in sorted(os.listdir(sng_dir)):
         path = os.path.join(sng_dir, file_name)
-        filehash.update(file_name.encode('utf-8'))
+        filehash.update(file_name.encode("utf-8"))
         filehash.update(_get_file_md5(path).encode())
     return filehash.hexdigest()
-        
+
 
 def gather_files_from_directory(
     directory: os.PathLike, *, offset: int, allow_nonsng_files: bool
@@ -259,12 +282,19 @@ def gather_files_from_directory(
             if filename in SNG_RESERVED_FILES:
                 logger.debug("%s is reserved, skipping", filename)
                 continue
-            logger.warning("Found encoded file not set by the sng standard: %s", filename)
+            logger.warning(
+                "Found encoded file not set by the sng standard: %s", filename
+            )
             if not allow_nonsng_files:
-                logger.warning("Allowing non-sng files is set to False, skipping file %s.", filename)
+                logger.warning(
+                    "Allowing non-sng files is set to False, skipping file %s.",
+                    filename,
+                )
                 continue
-            logger.warning("Allowing non-sng files is set to True, encoding file %s.", filename)
-            
+            logger.warning(
+                "Allowing non-sng files is set to True, encoding file %s.", filename
+            )
+
         filepath = os.path.join(directory, filename)
         if os.path.isfile(filepath):
             with open(filepath, "rb") as file:
@@ -293,7 +323,9 @@ def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
     cfg = ConfigParser()
     ini_path = os.path.join(filedir, "song.ini")
     if not os.path.exists(ini_path):
-        raise FileNotFoundError("song.ini not found in provided directory '%s'." % filedir)
+        raise FileNotFoundError(
+            "song.ini not found in provided directory '%s'." % filedir
+        )
     with open(ini_path) as f:
         cfg.read_file(f)
     return dict(cfg["Song"])

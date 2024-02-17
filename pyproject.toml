@@ -8,7 +8,7 @@ description = "Python library for reading .sng files"
 readme = "README.md"
 keywords = ["sng", ".sng", "clone hero", "ch", "file", "sng-format", "sng-parse"]
 license = {file = "LICENSE"}
-version = "1.1.1"
+version = "1.2.0"
 requires-python = ">= 3.10"
 authors = [
   {name = "Josh Mcdaniel", email = "80354972+joshrmcdaniel@users.noreply.github.com"},
@@ -24,6 +24,10 @@ classifiers = [
 
 [project.urls]
 homepage = "https://github.com/joshrmcdaniel/sng-format-python"
+
 [tool.setuptools.packages.find]
 where = ["src/"]
 include = ["sng_parser*"]
+
+[project.scripts]
+sng_parser = "sng_parser.__main__:main"

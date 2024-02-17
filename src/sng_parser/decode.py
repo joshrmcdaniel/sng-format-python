@@ -19,7 +19,8 @@ from .common import (
     StructTypes,
     calc_and_read_buf,
     _valid_sng_file,
-    _illegal_filename
+    _fail_on_invalid_sng_ver,
+    _illegal_filename,
 )
 
 s = StructTypes
@@ -44,6 +45,7 @@ def read_sng_header(buffer: BufferedReader) -> SngHeader:
     file_identifier, version, xor_mask = calc_and_unpack(
         _with_endian(6, s.CHAR, s.UINT, 16, s.CHAR), buffer
     )
+    _fail_on_invalid_sng_ver(version)
     return SngHeader(file_identifier, version, xor_mask)
 
 
@@ -258,12 +260,20 @@ def write_file_contents(
             logger.warn("Illegal filename: %s. Skipping", file_meta.filename)
             continue
         if not _valid_sng_file(file_meta.filename):
-            logger.warning("Found encoded file not set by the sng standard: %s", file_meta.filename)
+            logger.warning(
+                "Found encoded file not set by the sng standard: %s", file_meta.filename
+            )
             if not allow_nonsng_files:
-                logger.warning("Allowing non-sng files is set to False, skipping file %s.", file_meta.filename)
+                logger.warning(
+                    "Allowing non-sng files is set to False, skipping file %s.",
+                    file_meta.filename,
+                )
                 continue
-            logger.warning("Allowing non-sng files is set to True, decoding file %s.", file_meta.filename)
-        
+            logger.warning(
+                "Allowing non-sng files is set to True, decoding file %s.",
+                file_meta.filename,
+            )
+
         buffer.seek(file_meta.content_idx)
         _write_file_contents(file_meta, buffer, xor_mask=xor_mask, outdir=outdir)
 
@@ -342,7 +352,7 @@ def decode_sng(
     sng_file: os.PathLike | str | BufferedReader,
     *,
     outdir: Optional[os.PathLike | str] = None,
-    allow_nonsng_files: bool= False,
+    allow_nonsng_files: bool = False,
     sng_dir: Optional[os.PathLike | str] = None,
     overwrite: bool = False,
 ) -> None | NoReturn:
@@ -390,7 +400,11 @@ def decode_sng(
 
     file_meta_array: List[SngFileMetadata] = decode_file_metadata(sng_file)
     write_file_contents(
-        file_meta_array, sng_file, xor_mask=header.xor_mask, outdir=outdir, allow_nonsng_files=allow_nonsng_files
+        file_meta_array,
+        sng_file,
+        xor_mask=header.xor_mask,
+        outdir=outdir,
+        allow_nonsng_files=allow_nonsng_files,
     )
 
     if path_passed:

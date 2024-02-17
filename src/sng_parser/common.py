@@ -31,6 +31,9 @@ STRUCT_VALIDATION = {
     StructTypes.UBYTE.value: lambda x: 0 <= x <= 255,
 }
 
+# File format version
+SNG_VERSION: Final = 1
+
 # Reserved files not to be encoded
 SNG_RESERVED_FILES: Final = {"song.ini"}
 
@@ -104,6 +107,14 @@ SNG_ILLEGAL_FILENAMES: Final = {
     'LPT8',
     'LPT9'
 }
+
+def _valid_sng_version(ver: int) -> bool:
+    return 0 < ver <= SNG_VERSION
+
+
+def _fail_on_invalid_sng_ver(ver: int) -> None | NoReturn:
+    if not _valid_sng_version(ver):
+        raise ValueError("Invalid sng version specified, must be less than or equal to the number provided (I support versions up to and including %d)" % SNG_VERSION)
 
 
 def mask(data: bytes, xor_mask: bytes) -> bytearray:
