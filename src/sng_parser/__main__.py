@@ -53,7 +53,7 @@ def create_args() -> argparse.ArgumentParser:
     encode.add_argument(
         "-o",
         "--out-file",
-        type=Path,
+        type=str,
         help="The output path of the SNG file. Defaults to the md5 sum of the containing files of the target dir.",
         default=None,
         metavar='path/to/encoded.sng',
