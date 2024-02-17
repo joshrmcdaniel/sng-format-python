@@ -187,7 +187,6 @@ def _valid_char_arg(content: bytes, pack_len: int) -> bool | NoReturn:
     Raises:
         ValueError: When `pack_len` does not equal the length of `content` 
     """
-    print(content)
     if (e:=len(content)) != pack_len:
         raise ValueError("String pack size difference. Expected %d, got %d" % (e, pack_len) )
     return all(0 <= char <= 255 for char in content)

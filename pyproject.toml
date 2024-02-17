@@ -8,7 +8,7 @@ description = "Python library for reading .sng files"
 readme = "README.md"
 keywords = ["sng", ".sng", "clone hero", "ch", "file", "sng-format", "sng-parse"]
 license = {file = "LICENSE"}
-version = "1.2.0"
+version = "1.2.0-1"
 requires-python = ">= 3.10"
 authors = [
   {name = "Josh Mcdaniel", email = "80354972+joshrmcdaniel@users.noreply.github.com"},
