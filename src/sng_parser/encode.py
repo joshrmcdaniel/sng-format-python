@@ -8,7 +8,7 @@ from io import BufferedWriter
 from typing import List, Optional, Tuple
 
 
-from .common import SNG_RESERVED_FILES, mask, _with_endian, _valid_sng_file, _illegal_filename, SngFileMetadata, SngMetadataInfo, StructTypes
+from .common import SNG_RESERVED_FILES, mask, _with_endian, _validate_and_pack, _valid_sng_file, _illegal_filename, SngFileMetadata, SngMetadataInfo, StructTypes
 
 
 s = StructTypes
@@ -33,7 +33,7 @@ def write_header(file: BufferedWriter, version: int, xor_mask: bytes) -> None:
     """
     logger.info("Writing sng header")
     file.write(b"SNGPKG")
-    file.write(struct.pack(_with_endian(s.UINT), version))
+    file.write(_validate_and_pack(_with_endian(s.UINT), version))
     file.write(xor_mask)
     logger.info("Wrote header")
 
@@ -65,8 +65,8 @@ def write_file_meta(
             + struct.calcsize(_with_endian(s.ULONGLONG)) * 2
         )
 
-    file.write(struct.pack(_with_endian(s.ULONGLONG), calcd_size))
-    file.write(struct.pack(_with_endian(s.ULONGLONG), len(file_meta_array)))
+    file.write(_validate_and_pack(_with_endian(s.ULONGLONG), calcd_size))
+    file.write(_validate_and_pack(_with_endian(s.ULONGLONG), len(file_meta_array)))
     logger.debug("Calculated file metadata section size: %d", calcd_size)
 
     fileoffset = file.tell() + calcd_size
@@ -75,15 +75,15 @@ def write_file_meta(
     for file_meta in file_meta_array:
         logger.debug("Writing file metadata for %s", file_meta.filename)
         filename_len = len(file_meta.filename)
-        file.write(struct.pack(_with_endian(s.UBYTE), filename_len))
-        filename_packed = struct.pack(
+        file.write(_validate_and_pack(_with_endian(s.UBYTE), filename_len))
+        filename_packed = _validate_and_pack(
             _with_endian(filename_len, s.CHAR), file_meta.filename.encode("utf-8")
         )
         file.write(filename_packed)
         logger.debug("%s content size: %d", file_meta.filename, file_meta.content_len)
-        file.write(struct.pack(_with_endian(s.ULONGLONG), file_meta.content_len))
+        file.write(_validate_and_pack(_with_endian(s.ULONGLONG), file_meta.content_len))
         logger.debug("%s offset: %d", file_meta.filename, fileoffset)
-        file.write(struct.pack(_with_endian(s.ULONGLONG), fileoffset))
+        file.write(_validate_and_pack(_with_endian(s.ULONGLONG), fileoffset))
         fileoffset += file_meta.content_len
 
     logger.info("Wrote file metadata for %d files", len(file_meta_array))
@@ -105,20 +105,20 @@ def write_metadata(file: BufferedWriter, metadata: SngMetadataInfo) -> None:
     """
     logger.info("Writing song metadata")
 
-    metadata_content = struct.pack(_with_endian(s.ULONGLONG), len(metadata))
+    metadata_content = _validate_and_pack(_with_endian(s.ULONGLONG), len(metadata))
     key: str
     value: str
     for key, val in metadata.items():
         key_len: int = len(key)
-        key_len_packed = struct.pack(_with_endian(s.UINT), key_len)
-        key: bytes = struct.pack(_with_endian(key_len, s.CHAR), key.encode("utf-8"))
+        key_len_packed = _validate_and_pack(_with_endian(s.UINT), key_len)
+        key: bytes = _validate_and_pack(_with_endian(key_len, s.CHAR), key.encode("utf-8"))
 
         value_len: int = len(val)
-        value_len_packed: bytes = struct.pack(_with_endian(s.UINT), value_len)
-        value: bytes = struct.pack(_with_endian(value_len, s.CHAR), val.encode("utf-8"))
+        value_len_packed: bytes = _validate_and_pack(_with_endian(s.UINT), value_len)
+        value: bytes = _validate_and_pack(_with_endian(value_len, s.CHAR), val.encode("utf-8"))
         metadata_content += key_len_packed + key + value_len_packed + value
 
-    file.write(struct.pack(_with_endian(s.ULONGLONG), len(metadata_content)))
+    file.write(_validate_and_pack(_with_endian(s.ULONGLONG), len(metadata_content)))
     file.write(metadata_content)
 
     logger.info("Wrote song metadata")
@@ -145,7 +145,7 @@ def write_file_data(
     logger.debug("Writing file data")
 
     total_file_data_length = sum(map(lambda x: x[1].content_len, file_meta_array))
-    out.write(struct.pack(_with_endian(s.ULONGLONG), total_file_data_length))
+    out.write(_validate_and_pack(_with_endian(s.ULONGLONG), total_file_data_length))
 
     for filename, file_metadata in file_meta_array:
         chunk_size = 1024
