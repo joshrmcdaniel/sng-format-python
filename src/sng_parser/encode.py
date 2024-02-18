@@ -83,7 +83,6 @@ def write_file_meta(
             else:
                 meta_arr.append(a)
     calcd_size = struct.calcsize(_with_endian(s.ULONGLONG))
-    print(meta_arr)
     for file_meta in meta_arr:
         filename_len = len(file_meta.filename)
         calcd_size += (
