@@ -11,7 +11,6 @@ from typing import List, Optional, NoReturn, Tuple
 from configparser import ConfigParser
 
 from .common import (
-    mask,
     _with_endian,
     SngFileMetadata,
     SngMetadataInfo,
@@ -23,6 +22,7 @@ from .common import (
     _fail_on_invalid_sng_ver,
     _illegal_filename,
     _filter_illegal_chars,
+    write_and_mask,
 )
 
 s = StructTypes
@@ -303,18 +303,17 @@ def _write_file_contents(
     """
     file_path = os.path.join(outdir, file_metadata.filename)
     logger.debug("Writing file %s", file_metadata.filename)
-    with open(file_path, "wb") as out:
-        chunk_size = 1024
-        while out.tell() != file_metadata.content_len:
-            if file_metadata.content_len - out.tell() < chunk_size:
-                chunk_size = file_metadata.content_len - out.tell()
-            buf = buffer.read(chunk_size)
-            out.write(mask(buf, xor_mask))
-        if file_metadata.content_len != out.tell():
-            raise RuntimeError(
-                "File write mismatch. Expected %d, wrote %d"
-                % (file_metadata.content_len, out.tell())
-            )
+    bytes_written = write_and_mask(
+        read_from=buffer,
+        write_to=file_path,
+        xor_mask=xor_mask,
+        filesize=file_metadata.content_len,
+    )
+    if file_metadata.content_len != bytes_written:
+        raise RuntimeError(
+            "File write mismatch. Expected %d, wrote %d"
+            % (file_metadata.content_len, bytes_written)
+        )
 
     logger.debug("Wrote %s in %s", file_metadata.filename, outdir)
 
@@ -430,7 +429,7 @@ def create_dirname(metadata: SngFileMetadata) -> str:
     artist = metadata.get("artist", "Unknown Artist")
     song = metadata.get("name", "Unknown Song")
     charter = metadata.get("charter", "Unknown Charter")
-    charter = re.sub(r'<.+?>([\s\w]+)</?.+?>', r'\1', charter)
+    charter = re.sub(r"<.+?>([\s\w]+)</?.+?>", r"\1", charter)
     return _filter_illegal_chars(f"{artist} - {song} ({charter})")
 
 

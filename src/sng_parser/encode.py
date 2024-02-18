@@ -14,6 +14,7 @@ from .common import (
     mask,
     _with_endian,
     _fail_on_invalid_sng_ver,
+    write_and_mask,
     _validate_and_pack,
     _valid_sng_file,
     _illegal_filename,
@@ -199,13 +200,7 @@ def write_file_data(
             out.seek(after_write)
             out.truncate()
         else:
-            chunk_size = 1024
-            with open(filename, "rb") as f:
-                while f.tell() != file_metadata.content_len:
-                    if file_metadata.content_len - f.tell() < chunk_size:
-                        chunk_size = file_metadata.content_len - f.tell()
-                    buf = f.read(chunk_size)
-                    out.write(mask(buf, xor_mask))
+            bytes_written = write_and_mask(read_from=filename, write_to=out, xor_mask=xor_mask, filesize=file_metadata.content_len)
             size += file_metadata.content_len
     out.truncate()
     out.seek(data_idx)
