@@ -3,7 +3,6 @@ import os
 import re
 import struct
 
-import functools
 from io import BufferedReader
 from pathlib import Path
 from typing import List, Optional, NoReturn, Tuple
