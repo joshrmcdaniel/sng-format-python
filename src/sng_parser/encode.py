@@ -11,7 +11,6 @@ from typing import List, Optional, Tuple
 
 from .common import (
     SNG_RESERVED_FILES,
-    mask,
     _with_endian,
     _fail_on_invalid_sng_ver,
     write_and_mask,
@@ -21,17 +20,16 @@ from .common import (
     SngFileMetadata,
     SngMetadataInfo,
     StructTypes,
-    FileOffset
+    FileOffset,
 )
 
-from .internal import transcode
+from .audio import parllel_transcode_opus, eval_audio_futures
 
 s = StructTypes
 logger = logging.getLogger(__package__)
 
-__all__ = [
-    'decode_sng'
-]
+__all__ = ["decode_sng"]
+
 
 def write_header(file: BufferedWriter, version: int, xor_mask: bytes) -> None:
     """
@@ -79,9 +77,9 @@ def write_file_meta(
     if convert_to_opus:
         meta_arr = []
         for a in file_meta_array:
-            filename, ext = a.filename.split('.')
-            if ext in {'ogg', 'mp3', "wav"}:
-                meta_arr.append(SngFileMetadata(filename+'.opus', 0, 0))
+            filename, ext = a.filename.split(".")
+            if ext in {"ogg", "mp3", "wav"}:
+                meta_arr.append(SngFileMetadata(filename + ".opus", 0, 0))
             else:
                 meta_arr.append(a)
     calcd_size = struct.calcsize(_with_endian(s.ULONGLONG))
@@ -110,7 +108,7 @@ def write_file_meta(
         )
         file.write(filename_packed)
         logger.debug("%s content size: %d", file_meta.filename, file_meta.content_len)
-        ret.append(FileOffset(file_meta_array[idx].filename,  file.tell()))
+        ret.append(FileOffset(file_meta_array[idx].filename, file.tell()))
         file.write(_validate_and_pack(_with_endian(s.ULONGLONG), file_meta.content_len))
         logger.debug("%s offset: %d", file_meta.filename, fileoffset)
         file.write(_validate_and_pack(_with_endian(s.ULONGLONG), fileoffset))
@@ -164,7 +162,7 @@ def write_file_data(
     file_meta_array: List[Tuple[str, SngFileMetadata]],
     xor_mask: bytes,
     offset_ref: List[FileOffset],
-    convert_to_opus: bool
+    convert_to_opus: bool,
 ):
     """
     Writes the actual file data for each file included in the SNG package.
@@ -187,21 +185,39 @@ def write_file_data(
 
     out.write(_validate_and_pack(_with_endian(s.ULONGLONG), 0))
     if convert_to_opus:
-        exts = {'ogg', 'mp3', "wav"}
+        exts = {"ogg", "mp3", "wav"}
+
         def _non_audio_opus_file(meta: str):
             return any(meta.endswith(ext) for ext in exts)
-        no_convert = filter(lambda x: not _non_audio_opus_file(x[1].filename), file_meta_array)
-        convert = filter(lambda x: _non_audio_opus_file(x.filename), offset_ref)
-        pool, futures = transcode.execute_audio_pool(convert)
+
+        no_convert = filter(
+            lambda x: not _non_audio_opus_file(x[1].filename), file_meta_array
+        )
+        convert = list(filter(lambda x: _non_audio_opus_file(x.filename), offset_ref))
+        pool, futures =  parllel_transcode_opus(convert)
         for filename, file_metadata in no_convert:
             logger.debug("Writing %s to file", file_metadata.filename)
-            size +=  write_and_mask(read_from=filename, write_to=out, xor_mask=xor_mask, filesize=file_metadata.content_len)
-        size += transcode.eval_futures(out, pool, futures, xor_mask=xor_mask)
+            size += write_and_mask(
+                read_from=filename,
+                write_to=out,
+                xor_mask=xor_mask,
+                filesize=file_metadata.content_len,
+            )
+        size += eval_audio_futures(out, pool, futures, xor_mask=xor_mask)
     else:
-        for filename, file_metadata in no_convert:
-            bytes_written = write_and_mask(read_from=filename, write_to=out, xor_mask=xor_mask, filesize=file_metadata.content_len)
+        for filename, file_metadata in file_meta_array:
+            bytes_written = write_and_mask(
+                read_from=filename,
+                write_to=out,
+                xor_mask=xor_mask,
+                filesize=file_metadata.content_len,
+            )
             if bytes_written != file_metadata.content_len:
-                raise RuntimeError("Wrote %d bytes when expected %d bytes", bytes_written, file_metadata.content_len)
+                raise RuntimeError(
+                    "Wrote %d bytes when expected %d bytes",
+                    bytes_written,
+                    file_metadata.content_len,
+                )
             size += file_metadata.content_len
     out.truncate()
     out.seek(data_idx)
@@ -219,6 +235,7 @@ def encode_sng(
     version: int = 1,
     xor_mask: Optional[bytes] = None,
     metadata: Optional[SngMetadataInfo] = None,
+    encode_audio: bool = True,
 ) -> None:
     """
     Encodes a directory of files into a single SNG package file.
@@ -264,10 +281,20 @@ def encode_sng(
         file_meta_array = gather_files_from_directory(
             dir_to_encode, offset=file.tell(), allow_nonsng_files=allow_nonsng_files
         )
-        write_refs = write_file_meta(file, list(map(lambda x: x[1], file_meta_array)), convert_to_opus=True)
-        write_refs = list(map(lambda x: FileOffset(filename=os.path.join(dir_to_encode, x.filename), offset=x.offset), write_refs))
-        print(write_refs)
-        write_file_data(file, file_meta_array, xor_mask, write_refs, True)
+        write_refs = write_file_meta(
+            file,
+            list(map(lambda x: x[1], file_meta_array)),
+            convert_to_opus=encode_audio,
+        )
+        write_refs = list(
+            map(
+                lambda x: FileOffset(
+                    filename=os.path.join(dir_to_encode, x.filename), offset=x.offset
+                ),
+                write_refs,
+            )
+        )
+        write_file_data(file, file_meta_array, xor_mask, write_refs, encode_audio)
 
 
 def _get_file_md5(path: os.PathLike) -> str:
@@ -333,7 +360,6 @@ def gather_files_from_directory(
                 "Allowing non-sng files is set to True, encoding file %s.", filename
             )
 
-        file, ext = filename.split('.')
 
         filepath = os.path.join(directory, filename)
         if os.path.isfile(filepath):
@@ -368,6 +394,6 @@ def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
         )
     with open(ini_path) as f:
         cfg.read_file(f)
-    if 'song' in cfg:
-        return dict(cfg['song'])
+    if "song" in cfg:
+        return dict(cfg["song"])
     return dict(cfg["Song"])

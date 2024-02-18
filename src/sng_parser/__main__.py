@@ -42,13 +42,18 @@ def create_args() -> argparse.ArgumentParser:
         dest="log_level",
     )
     subparser = parser.add_subparsers(
-        title="action", metavar="{encode|decode}", description="Encode to or decode from an sng file. For futher usage, run %(prog)s {encode|decode} -h", required=True
+        title="action",
+        metavar="{encode|decode}",
+        description="Encode to or decode from an sng file. For futher usage, run %(prog)s {encode|decode} -h",
+        required=True,
     )
-    
 
     encode = subparser.add_parser("encode")
     encode.add_argument(
-        "sng_dir", type=Path, help="Directory to encode in the sng format", metavar="song_dir"
+        "sng_dir",
+        type=Path,
+        help="Directory to encode in the sng format",
+        metavar="song_dir",
     )
     encode.add_argument(
         "-o",
@@ -56,7 +61,7 @@ def create_args() -> argparse.ArgumentParser:
         type=str,
         help="The output path of the SNG file. Defaults to the md5 sum of the containing files of the target dir.",
         default=None,
-        metavar='path/to/encoded.sng',
+        metavar="path/to/encoded.sng",
         dest="out_file",
     )
     encode.add_argument(
@@ -78,11 +83,19 @@ def create_args() -> argparse.ArgumentParser:
     encode.add_argument(
         "-V",
         "--version",
-        metavar='sng_version',
+        metavar="sng_version",
         type=int,
         help="sng format version to use.",
         default=1,
         dest="version",
+    )
+    encode.add_argument(
+        "-e",
+        "--encode-audio",
+        help="Encode the audio files to opus. Default: %(default)s.",
+        action="store_true",
+        default=False,
+        dest="encode_audio",
     )
     encode.set_defaults(func=run_encode)
 
@@ -124,9 +137,11 @@ def create_args() -> argparse.ArgumentParser:
         default=False,
         dest="force",
     )
-    
+
     decode.set_defaults(func=run_decode)
-    parser.usage = "\n  "+encode.format_usage()[7:] + "  "+decode.format_usage()[7:]+ "\n"
+    parser.usage = (
+        "\n  " + encode.format_usage()[7:] + "  " + decode.format_usage()[7:] + "\n"
+    )
     return parser
 
 
@@ -138,6 +153,7 @@ def run_encode(args: argparse.Namespace) -> None:
             version=args.version,
             overwrite=args.force,
             allow_nonsng_files=not args.ignore_nonsng_files,
+            encode_audio=args.encode_audio
         )
     except (FileExistsError, ValueError, RuntimeError) as err:
         logger.critical("Failed to encode. Error: %s.", err)
