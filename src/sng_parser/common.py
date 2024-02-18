@@ -3,7 +3,7 @@ import re
 import struct
 
 from enum import Enum
-from io import BufferedReader, BufferedWriter
+from io import BufferedReader, BufferedWriter, BufferedRandom
 from typing import Final, NamedTuple, NoReturn, Optional, Set, TypedDict, Tuple
 
 
@@ -327,8 +327,9 @@ def write_and_mask(
     filesize: Optional[int] = None,
     chunk_size: int = 1024,
 ) -> int:
-    passed_read_buffer = isinstance(read_from, BufferedReader)
-    passed_write_buffer = isinstance(write_to, BufferedWriter)
+    passed_read_buffer = not isinstance(read_from, str)
+    passed_write_buffer = not isinstance(write_to, str)
+
     if not passed_read_buffer:
         if os.path.exists(read_from):
             read_from = open(read_from, "rb")
@@ -338,16 +339,7 @@ def write_and_mask(
         write_to = open(write_to, "wb")
 
     if filesize is None:
-        # whichever file is *not* passed as a buffer was meant to be closed upon completion
-        # this is the filesize to use
-        #
-        # internal anyway, no one *should* call this
-        if passed_read_buffer:
-            filesize = _calc_filesize(write_to)
-        
-        if passed_write_buffer:
-            filesize = _calc_filesize(read_from)
-        
+        filesize = _calc_filesize(read_from)
 
     _write_and_mask(
         outfile=write_to,
@@ -363,6 +355,7 @@ def write_and_mask(
     return filesize
 
 def _calc_filesize(file: BufferedReader | BufferedWriter) -> int:
+
     cur = file.tell()
     size = file.seek(0, os.SEEK_END)
     file.seek(cur)
@@ -389,6 +382,9 @@ class SngHeader(NamedTuple):
     version: int
     xor_mask: bytes
 
+class FileOffset(NamedTuple):
+    filename: str
+    offset: int
 
 class SngMetadataInfo(TypedDict):
     """

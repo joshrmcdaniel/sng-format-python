@@ -25,6 +25,10 @@ from .common import (
     write_and_mask,
 )
 
+__all__ = [
+    'decode_sng'
+]
+
 s = StructTypes
 logger = logging.getLogger(__package__)
 

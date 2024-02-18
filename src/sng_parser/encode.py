@@ -2,7 +2,7 @@ import hashlib
 import logging
 import os
 import struct
-
+from pathlib import Path
 from copy import deepcopy
 from configparser import ConfigParser
 from io import BufferedWriter
@@ -21,12 +21,17 @@ from .common import (
     SngFileMetadata,
     SngMetadataInfo,
     StructTypes,
+    FileOffset
 )
 
+from .internal import transcode
 
 s = StructTypes
 logger = logging.getLogger(__package__)
 
+__all__ = [
+    'decode_sng'
+]
 
 def write_header(file: BufferedWriter, version: int, xor_mask: bytes) -> None:
     """
@@ -105,7 +110,7 @@ def write_file_meta(
         )
         file.write(filename_packed)
         logger.debug("%s content size: %d", file_meta.filename, file_meta.content_len)
-        ret.append((file_meta_array[idx].filename,  file.tell()))
+        ret.append(FileOffset(file_meta_array[idx].filename,  file.tell()))
         file.write(_validate_and_pack(_with_endian(s.ULONGLONG), file_meta.content_len))
         logger.debug("%s offset: %d", file_meta.filename, fileoffset)
         file.write(_validate_and_pack(_with_endian(s.ULONGLONG), fileoffset))
@@ -153,12 +158,12 @@ def write_metadata(file: BufferedWriter, metadata: SngMetadataInfo) -> None:
 
     logger.info("Wrote song metadata")
 
-from .audio import to_opus
+
 def write_file_data(
     out: BufferedWriter,
     file_meta_array: List[Tuple[str, SngFileMetadata]],
     xor_mask: bytes,
-    offset_ref: List[Tuple],
+    offset_ref: List[FileOffset],
     convert_to_opus: bool
 ):
     """
@@ -179,28 +184,24 @@ def write_file_data(
 
     size = 0
     data_idx = out.tell()
+
     out.write(_validate_and_pack(_with_endian(s.ULONGLONG), 0))
-    for filename, file_metadata in file_meta_array:
-        file, ext = file_metadata.filename.split('.')
-        if ext in {'ogg', 'mp3', "wav"} and convert_to_opus:
-            print(filename)
-            print(os.path.basename(filename))
-            print(offset_ref)
-            idx = next(y for x, y in offset_ref if x == os.path.basename(filename))
-            buf = to_opus(filename)
-            before_write = out.tell()
-            out.write(mask(buf.read(), xor_mask))
-            after_write = out.tell()
-            out.truncate()
-            opus_size = after_write - before_write
-            size += opus_size
-            out.seek(idx)
-            out.write(_validate_and_pack(_with_endian(s.ULONGLONG), opus_size))
-            out.write(_validate_and_pack(_with_endian(s.ULONGLONG), before_write))
-            out.seek(after_write)
-            out.truncate()
-        else:
+    if convert_to_opus:
+        exts = {'ogg', 'mp3', "wav"}
+        def _non_audio_opus_file(meta: str):
+            return any(meta.endswith(ext) for ext in exts)
+        no_convert = filter(lambda x: not _non_audio_opus_file(x[1].filename), file_meta_array)
+        convert = filter(lambda x: _non_audio_opus_file(x.filename), offset_ref)
+        pool, futures = transcode.execute_audio_pool(convert)
+        for filename, file_metadata in no_convert:
+            logger.debug("Writing %s to file", file_metadata.filename)
+            size +=  write_and_mask(read_from=filename, write_to=out, xor_mask=xor_mask, filesize=file_metadata.content_len)
+        size += transcode.eval_futures(out, pool, futures, xor_mask=xor_mask)
+    else:
+        for filename, file_metadata in no_convert:
             bytes_written = write_and_mask(read_from=filename, write_to=out, xor_mask=xor_mask, filesize=file_metadata.content_len)
+            if bytes_written != file_metadata.content_len:
+                raise RuntimeError("Wrote %d bytes when expected %d bytes", bytes_written, file_metadata.content_len)
             size += file_metadata.content_len
     out.truncate()
     out.seek(data_idx)
@@ -249,7 +250,9 @@ def encode_sng(
         )
     if output_filename is None:
         output_filename = create_sng_filename(dir_to_encode) + ".sng"
-    if not output_filename.endswith(".sng"):
+    if isinstance(output_filename, str):
+        output_filename = Path(output_filename)
+    if not output_filename.name.endswith(".sng"):
         output_filename += ".sng"
     if os.path.exists(output_filename) and not overwrite:
         err = FileExistsError("Sng file exists: %s" % output_filename)
@@ -262,6 +265,7 @@ def encode_sng(
             dir_to_encode, offset=file.tell(), allow_nonsng_files=allow_nonsng_files
         )
         write_refs = write_file_meta(file, list(map(lambda x: x[1], file_meta_array)), convert_to_opus=True)
+        write_refs = list(map(lambda x: FileOffset(filename=os.path.join(dir_to_encode, x.filename), offset=x.offset), write_refs))
         print(write_refs)
         write_file_data(file, file_meta_array, xor_mask, write_refs, True)
 
