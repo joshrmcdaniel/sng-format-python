@@ -6,6 +6,13 @@ __pycache__/
 # C extensions
 *.so
 
+# test files
+test-sngs
+
+# Profiling
+profile.html
+profile.json
+
 # Distribution / packaging
 .Python
 build/

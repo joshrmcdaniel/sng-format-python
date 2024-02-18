@@ -1,16 +1,15 @@
 import logging
 import os
+import re
 import struct
+
 from io import BufferedReader
 from pathlib import Path
-
-
 from typing import List, Optional, NoReturn, Tuple
 
 from configparser import ConfigParser
 
 from .common import (
-    mask,
     _with_endian,
     SngFileMetadata,
     SngMetadataInfo,
@@ -21,7 +20,13 @@ from .common import (
     _valid_sng_file,
     _fail_on_invalid_sng_ver,
     _illegal_filename,
+    _filter_illegal_chars,
+    write_and_mask,
 )
+
+__all__ = [
+    'decode_sng'
+]
 
 s = StructTypes
 logger = logging.getLogger(__package__)
@@ -301,18 +306,17 @@ def _write_file_contents(
     """
     file_path = os.path.join(outdir, file_metadata.filename)
     logger.debug("Writing file %s", file_metadata.filename)
-    with open(file_path, "wb") as out:
-        chunk_size = 1024
-        while out.tell() != file_metadata.content_len:
-            if file_metadata.content_len - out.tell() < chunk_size:
-                chunk_size = file_metadata.content_len - out.tell()
-            buf = buffer.read(chunk_size)
-            out.write(mask(buf, xor_mask))
-        if file_metadata.content_len != out.tell():
-            raise RuntimeError(
-                "File write mismatch. Expected %d, wrote %d"
-                % (file_metadata.content_len, out.tell())
-            )
+    bytes_written = write_and_mask(
+        read_from=buffer,
+        write_to=file_path,
+        xor_mask=xor_mask,
+        filesize=file_metadata.content_len,
+    )
+    if file_metadata.content_len != bytes_written:
+        raise RuntimeError(
+            "File write mismatch. Expected %d, wrote %d"
+            % (file_metadata.content_len, bytes_written)
+        )
 
     logger.debug("Wrote %s in %s", file_metadata.filename, outdir)
 
@@ -328,7 +332,9 @@ def _as_path_obj(path: str, *, validate: bool = True) -> Path | NoReturn:
     Returns:
         Path | NoReturn: The Path object corresponding to the given path string.
     """
-    path = Path(path)
+    path: Path = Path(path)
+    if _illegal_filename(path.name):
+        raise OSError("Illegal filename specified: %s" % path.name)
     if validate:
         _validate_path(path)
     return path
@@ -426,7 +432,8 @@ def create_dirname(metadata: SngFileMetadata) -> str:
     artist = metadata.get("artist", "Unknown Artist")
     song = metadata.get("name", "Unknown Song")
     charter = metadata.get("charter", "Unknown Charter")
-    return f"{artist} - {song} ({charter})"
+    charter = re.sub(r"<.+?>([\s\w]+)</?.+?>", r"\1", charter)
+    return _filter_illegal_chars(f"{artist} - {song} ({charter})")
 
 
 def write_metadata(metadata: SngMetadataInfo, outdir: os.PathLike) -> None:

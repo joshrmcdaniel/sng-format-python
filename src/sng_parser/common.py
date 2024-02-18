@@ -1,9 +1,10 @@
+import os
 import re
 import struct
 
 from enum import Enum
-from io import BufferedReader
-from typing import Final, NamedTuple, NoReturn, TypedDict, Tuple
+from io import BufferedReader, BufferedWriter, BufferedRandom
+from typing import Final, NamedTuple, NoReturn, Optional, Set, TypedDict, Tuple
 
 
 # Constants
@@ -22,26 +23,30 @@ class StructTypes(Enum):
 
 
 # Regex for struct format validation
-STRUCT_TYPE_RE = re.compile(r'(?:([IQB])|(?:(\d+)(s)))')
+STRUCT_TYPE_RE = re.compile(r"(?:([IQB])|(?:(\d+)(s)))")
 
 # Validation for struct packing
 STRUCT_VALIDATION = {
-    StructTypes.UINT.value: lambda x: 0 <= x <= 4_294_967_295,
-    StructTypes.ULONGLONG.value: lambda x: 0 <= x <= 18_446_744_073_709_551_615,
-    StructTypes.UBYTE.value: lambda x: 0 <= x <= 255,
+    StructTypes.UINT.value: lambda x: 0
+    <= x
+    <= ((1 << 32) - 1),  # 2**32-1, 4_294_967_295
+    StructTypes.ULONGLONG.value: lambda x: 0
+    <= x
+    <= ((1 << 64) - 1),  # 2**64-1, 18_446_744_073_709_551_615
+    StructTypes.UBYTE.value: lambda x: 0 <= x <= 255,  # ((2<<8)-1), 2**8-1
 }
 
 # File format version
-SNG_VERSION: Final = 1
+SNG_VERSION: Final[int] = 1
 
 # Reserved files not to be encoded
-SNG_RESERVED_FILES: Final = {"song.ini"}
+SNG_RESERVED_FILES: Final[Set[str]] = {"song.ini"}
 
 # Note files allowed
-SNG_NOTES_FILES: Final = { 'notes.chart', 'notes.mid' }
+SNG_NOTES_FILES: Final[Set[str]] = {"notes.chart", "notes.mid"}
 
 # Audio filenames allowed
-SNG_AUDIO_FILES: Final = {
+SNG_AUDIO_FILES: Final[Set[str]] = {
     "guitar",
     "bass",
     "rhythm",
@@ -60,53 +65,52 @@ SNG_AUDIO_FILES: Final = {
 }
 
 # Audio file extensions allowed
-SNG_AUDIO_EXT: Final = {"mp3", "ogg", "opus", "wav"}
+SNG_AUDIO_EXT: Final[Set[str]] = {"mp3", "ogg", "opus", "wav"}
 
 # Image filenames allowed
-SNG_IMG_FILES: Final = {"album", "background", "highway"}
+SNG_IMG_FILES: Final[Set[str]] = {"album", "background", "highway"}
 
 # Image file extensions allowed
-SNG_IMG_EXT: Final = {"png", "jpg", "jpeg"}
+SNG_IMG_EXT: Final[Set[str]] = {"png", "jpg", "jpeg"}
 
 # Video filenames allowed
-SNG_VIDEO_FILES: Final = {"video"}
+SNG_VIDEO_FILES: Final[Set[str]] = {"video"}
 
 # Video file extensions allowed
-SNG_VIDEO_EXT: Final = {"mp4", "avi", "webm", "vp8", "ogv", "mpeg"}
+SNG_VIDEO_EXT: Final[Set[str]] = {"mp4", "avi", "webm", "vp8", "ogv", "mpeg"}
 
 # Characters not allowed in filenames
-SNG_ILLEGAL_CHARS: Final = {
-    '<>:"/|?*\\'
-}
+SNG_ILLEGAL_CHARS: Final[str] = r'\\<>:"/\|\?\*'
 
 # Illegal filenames
-SNG_ILLEGAL_FILENAMES: Final = {
-    '..',
-    'CON',
-    'PRN',
-    'AUX',
-    'NUL',
-    'COM0',
-    'COM1',
-    'COM2',
-    'COM3',
-    'COM4',
-    'COM5',
-    'COM6',
-    'COM7',
-    'COM8',
-    'COM9',
-    'LPT0',
-    'LPT1',
-    'LPT2',
-    'LPT3',
-    'LPT4',
-    'LPT5',
-    'LPT6',
-    'LPT7',
-    'LPT8',
-    'LPT9'
+SNG_ILLEGAL_FILENAMES: Final[Set[str]] = {
+    "..",
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "COM0",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "LPT0",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
 }
+
 
 def _valid_sng_version(ver: int) -> bool:
     return 0 < ver <= SNG_VERSION
@@ -114,7 +118,10 @@ def _valid_sng_version(ver: int) -> bool:
 
 def _fail_on_invalid_sng_ver(ver: int) -> None | NoReturn:
     if not _valid_sng_version(ver):
-        raise ValueError("Invalid sng version specified, must be less than or equal to the number provided (I support versions up to and including %d)" % SNG_VERSION)
+        raise ValueError(
+            "Invalid sng version specified, must be less than or equal to the number provided (I support versions up to and including %d)"
+            % SNG_VERSION
+        )
 
 
 def mask(data: bytes, xor_mask: bytes) -> bytearray:
@@ -180,15 +187,17 @@ def _valid_char_arg(content: bytes, pack_len: int) -> bool | NoReturn:
     Args:
         content (bytes): Byte string to check if valid.
         pack_len (int): Length of the byte string
-    
+
     Returns:
         Whether the byte string is valid or not.
-    
+
     Raises:
-        ValueError: When `pack_len` does not equal the length of `content` 
+        ValueError: When `pack_len` does not equal the length of `content`
     """
-    if (e:=len(content)) != pack_len:
-        raise ValueError("String pack size difference. Expected %d, got %d" % (e, pack_len) )
+    if (e := len(content)) != pack_len:
+        raise ValueError(
+            "String pack size difference. Expected %d, got %d" % (e, pack_len)
+        )
     return all(0 <= char <= 255 for char in content)
 
 
@@ -208,15 +217,20 @@ def _validate_and_pack(fmt: str, content: bytes | int) -> bytes:
         ValueError: When the struct fmt string is invalid
         ValueError: When `fmt` contains a char array and an invalid character is passed
         ValueError: When `fmt` has a numerical value and exceeds the byte requirements of the type
-        RuntimError: When something goes *horribly* wrong 
+        RuntimError: When something goes *horribly* wrong
     """
     if fmt[0] != StructTypes.ENDIAN.value:
-        raise ValueError('First character in struct format is not the expected endian. Expected endian: `%s`' % StructTypes.ENDIAN.value)
+        raise ValueError(
+            "First character in struct format is not the expected endian. Expected endian: `%s`"
+            % StructTypes.ENDIAN.value
+        )
     matches = STRUCT_TYPE_RE.findall(fmt[1:])
     if matches is None:
-        raise ValueError("No struct characters used by sng format found in passed format.")
+        raise ValueError(
+            "No struct characters used by sng format found in passed format."
+        )
     for match in matches:
-        if match[1] and match[2]: # is char, we need to convert it.
+        if match[1] and match[2]:  # is char, we need to convert it.
             if not _valid_char_arg(content, int(match[1])):
                 raise ValueError("Invalid byte in character string passed.")
         elif match[0]:
@@ -225,7 +239,6 @@ def _validate_and_pack(fmt: str, content: bytes | int) -> bytes:
         else:
             raise RuntimeError("Something is wrong")
     return struct.pack(fmt, content)
-    
 
 
 def _with_endian(*args: Tuple[StructTypes | int]):
@@ -258,12 +271,12 @@ def _valid_audio_file(filename: str, ext: str) -> bool:
 
 
 def _illegal_filename(file: str) -> bool:
-    if file == '..':
+    if file == "..":
         return False
     if len(file) > 255:
         return True
     file = file.upper()
-    if file.endswith('.') or file.endswith(' '):
+    if file.endswith(".") or file.endswith(" "):
         return True
     if any(ord(x) < 31 for x in file):
         return True
@@ -271,9 +284,12 @@ def _illegal_filename(file: str) -> bool:
     if any(ilgl_chr in file for ilgl_chr in SNG_ILLEGAL_CHARS):
         return True
 
-    filename, ext = file.rsplit('.', 2)
+    filename, ext = file.rsplit(".", 2)
     return any(x in filename or x in ext for x in SNG_ILLEGAL_FILENAMES)
 
+
+def _filter_illegal_chars(filename: str) -> str:
+    return re.sub(rf"[{SNG_ILLEGAL_CHARS}]", "", filename)
 
 
 def _valid_sng_file(file: str) -> bool:
@@ -287,6 +303,63 @@ def _valid_sng_file(file: str) -> bool:
         or file in SNG_NOTES_FILES
     )
 
+
+def _write_and_mask(
+    *,
+    outfile: BufferedWriter,
+    infile: BufferedReader,
+    xor_mask: bytearray,
+    filesize: int,
+    chunk_size: int,
+) -> None:
+    cur_offset = infile.tell()
+    expected_offset = cur_offset+ filesize
+    while infile.tell() != expected_offset:
+        chunk_size = min(expected_offset - infile.tell(), chunk_size)
+        buf = infile.read(chunk_size)
+        outfile.write(mask(buf, xor_mask))
+
+def write_and_mask(
+    *,
+    read_from: os.PathLike | BufferedReader,
+    write_to: os.PathLike | BufferedWriter,
+    xor_mask: bytearray,
+    filesize: Optional[int] = None,
+    chunk_size: int = 1024,
+) -> int:
+    passed_read_buffer = not isinstance(read_from, str)
+    passed_write_buffer = not isinstance(write_to, str)
+
+    if not passed_read_buffer:
+        if os.path.exists(read_from):
+            read_from = open(read_from, "rb")
+        else:
+            raise FileNotFoundError("No read file found at %s" % read_from)
+    if not passed_write_buffer:
+        write_to = open(write_to, "wb")
+
+    if filesize is None:
+        filesize = _calc_filesize(read_from)
+
+    _write_and_mask(
+        outfile=write_to,
+        infile=read_from,
+        xor_mask=xor_mask,
+        filesize=filesize,
+        chunk_size=chunk_size,
+    )
+    if not passed_read_buffer:
+        read_from.close()
+    if not passed_write_buffer:
+        write_to.close()
+    return filesize
+
+def _calc_filesize(file: BufferedReader | BufferedWriter) -> int:
+
+    cur = file.tell()
+    size = file.seek(0, os.SEEK_END)
+    file.seek(cur)
+    return size
 
 class SngFileMetadata(NamedTuple):
     """
@@ -309,6 +382,9 @@ class SngHeader(NamedTuple):
     version: int
     xor_mask: bytes
 
+class FileOffset(NamedTuple):
+    filename: str
+    offset: int
 
 class SngMetadataInfo(TypedDict):
     """
