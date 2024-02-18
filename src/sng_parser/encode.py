@@ -206,11 +206,6 @@ def write_file_data(
     out.seek(data_idx)
     out.write(_validate_and_pack(_with_endian(s.ULONGLONG), size))
 
-                
-        
-    # for filename, file_metadata in file_meta_array:
-    
-
     logger.debug("Wrote file data")
 
 
