@@ -3,7 +3,7 @@ import struct
 
 from enum import Enum
 from io import BufferedReader
-from typing import Final, NamedTuple, NoReturn, TypedDict, Tuple
+from typing import Final, NamedTuple, NoReturn, Set, TypedDict, Tuple
 
 
 # Constants
@@ -32,16 +32,16 @@ STRUCT_VALIDATION = {
 }
 
 # File format version
-SNG_VERSION: Final = 1
+SNG_VERSION: Final[int] = 1
 
 # Reserved files not to be encoded
-SNG_RESERVED_FILES: Final = {"song.ini"}
+SNG_RESERVED_FILES: Final[Set[str]] = {"song.ini"}
 
 # Note files allowed
-SNG_NOTES_FILES: Final = { 'notes.chart', 'notes.mid' }
+SNG_NOTES_FILES: Final[Set[str]] = { 'notes.chart', 'notes.mid' }
 
 # Audio filenames allowed
-SNG_AUDIO_FILES: Final = {
+SNG_AUDIO_FILES: Final[Set[str]] = {
     "guitar",
     "bass",
     "rhythm",
@@ -60,27 +60,25 @@ SNG_AUDIO_FILES: Final = {
 }
 
 # Audio file extensions allowed
-SNG_AUDIO_EXT: Final = {"mp3", "ogg", "opus", "wav"}
+SNG_AUDIO_EXT: Final[Set[str]] = {"mp3", "ogg", "opus", "wav"}
 
 # Image filenames allowed
-SNG_IMG_FILES: Final = {"album", "background", "highway"}
+SNG_IMG_FILES: Final[Set[str]] = {"album", "background", "highway"}
 
 # Image file extensions allowed
-SNG_IMG_EXT: Final = {"png", "jpg", "jpeg"}
+SNG_IMG_EXT: Final[Set[str]] = {"png", "jpg", "jpeg"}
 
 # Video filenames allowed
-SNG_VIDEO_FILES: Final = {"video"}
+SNG_VIDEO_FILES: Final[Set[str]] = {"video"}
 
 # Video file extensions allowed
-SNG_VIDEO_EXT: Final = {"mp4", "avi", "webm", "vp8", "ogv", "mpeg"}
+SNG_VIDEO_EXT: Final[Set[str]] = {"mp4", "avi", "webm", "vp8", "ogv", "mpeg"}
 
 # Characters not allowed in filenames
-SNG_ILLEGAL_CHARS: Final = {
-    '<>:"/|?*\\'
-}
+SNG_ILLEGAL_CHARS: Final[str] = r'\\<>:"/\|\?\*'
 
 # Illegal filenames
-SNG_ILLEGAL_FILENAMES: Final = {
+SNG_ILLEGAL_FILENAMES: Final[Set[str]] = {
     '..',
     'CON',
     'PRN',
@@ -274,6 +272,9 @@ def _illegal_filename(file: str) -> bool:
     filename, ext = file.rsplit('.', 2)
     return any(x in filename or x in ext for x in SNG_ILLEGAL_FILENAMES)
 
+
+def _filter_illegal_chars(filename: str) -> str:
+    return re.sub(rf'[{SNG_ILLEGAL_CHARS}]', '', filename)
 
 
 def _valid_sng_file(file: str) -> bool:

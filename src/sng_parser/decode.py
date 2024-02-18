@@ -1,10 +1,11 @@
 import logging
 import os
+import re
 import struct
+
+import functools
 from io import BufferedReader
 from pathlib import Path
-
-
 from typing import List, Optional, NoReturn, Tuple
 
 from configparser import ConfigParser
@@ -21,6 +22,7 @@ from .common import (
     _valid_sng_file,
     _fail_on_invalid_sng_ver,
     _illegal_filename,
+    _filter_illegal_chars,
 )
 
 s = StructTypes
@@ -328,7 +330,9 @@ def _as_path_obj(path: str, *, validate: bool = True) -> Path | NoReturn:
     Returns:
         Path | NoReturn: The Path object corresponding to the given path string.
     """
-    path = Path(path)
+    path: Path = Path(path)
+    if _illegal_filename(path.name):
+        raise OSError("Illegal filename specified: %s" % path.name)
     if validate:
         _validate_path(path)
     return path
@@ -426,7 +430,8 @@ def create_dirname(metadata: SngFileMetadata) -> str:
     artist = metadata.get("artist", "Unknown Artist")
     song = metadata.get("name", "Unknown Song")
     charter = metadata.get("charter", "Unknown Charter")
-    return f"{artist} - {song} ({charter})"
+    charter = re.sub(r'<.+?>([\s\w]+)</?.+?>', r'\1', charter)
+    return _filter_illegal_chars(f"{artist} - {song} ({charter})")
 
 
 def write_metadata(metadata: SngMetadataInfo, outdir: os.PathLike) -> None:
