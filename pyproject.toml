@@ -8,7 +8,7 @@ description = "Python library for reading .sng files"
 readme = "README.md"
 keywords = ["sng", ".sng", "clone hero", "ch", "file", "sng-format", "sng-parse"]
 license = {file = "LICENSE"}
-version = "1.2.0-1"
+version = "1.3.0"
 requires-python = ">= 3.10"
 dependencies = [ "soundfile==0.12.1", "cffi>=1.0", "numpy",]
 authors = [

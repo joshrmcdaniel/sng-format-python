@@ -2,9 +2,9 @@
 -----------------------
 Python implementation for parsing and handling .sng files. [See the .sng format spec for information](https://github.com/mdsitton/SngFileFormat/tree/main).
 
-It is capable of reading SNG files, extracting metadata, file indexes, and file data. There is a function to write to disk as well.
+It is capable of reading SNG files, extracting metadata, encoding audio to .opus file indexes, and file data.
 
-I have not tested this thoroughly, but I've had zero issues with it so far.
+I have not tested this end-to-end, but I've had zero issues with it so far.
 
 # Instalation
 ## From pip
@@ -24,7 +24,7 @@ pip install -e .
 ``` console
 foo@bar:~$ sng_parser -h
 usage: 
-sng_parser encode [-h] [-o path/to/encoded.sng] [-i] [-f] [-V sng_version] song_dir
+sng_parser encode [-h] [-o path/to/encoded.sng] [-i] [-f] [-V sng_version] [-e] song_dir
 sng_parser decode [-h] [-o path/to/out/folder] [-i] [-d relative/to/out_dir] [-f] sng_file
 
 Decode/encode sng files
@@ -39,7 +39,7 @@ action:
   {encode|decode}
 
 foo@bar:~$ sng_parser encode -h
-usage: sng_parser encode [-h] [-o path/to/encoded.sng] [-i] [-f] [-V sng_version] song_dir
+usage: sng_parser encode [-h] [-o path/to/encoded.sng] [-i] [-f] [-V sng_version] [-e] song_dir
 
 positional arguments:
   song_dir              Directory to encode in the sng format
@@ -53,7 +53,7 @@ options:
   -f, --force           Overwrite existing files or directories. Default: False.
   -V sng_version, --version sng_version
                         sng format version to use.
-
+  -e, --encode-audio    Encode the audio files to opus. Default: False.
 foo@bar:~$ sng_parser decode -h
 usage: sng_parser decode [-h] [-o path/to/out/folder] [-i] [-d relative/to/out_dir] [-f] sng_file
 
