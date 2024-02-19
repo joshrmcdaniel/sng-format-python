@@ -45,6 +45,10 @@ def _execute_audio_pool(
     return pool, futures
 
 
+def parllel_transcode_opus(offset_ref: List[FileOffset]):
+    logger.debug("Encoding audio files to opus")
+    return _execute_audio_pool(_wrap_opus, offset_ref)
+
 def _wrap_opus(filename: str, offset: int, tmpfile: io.FileIO):
     to_opus(filename, tmpfile)
     tmpfile.truncate()
@@ -97,13 +101,3 @@ def eval_audio_futures(
     pool.shutdown()
 
     return size
-
-def _wrap_opus(filename: str, offset: int, tmpfile: io.FileIO):
-    to_opus(filename, tmpfile)
-    tmpfile.truncate()
-    tmpfile.seek(0)
-    return filename, offset, tmpfile
-
-def parllel_transcode_opus(offset_ref: List[FileOffset]):
-    logger.debug("Encoding audio files to opus")
-    return _execute_audio_pool(_wrap_opus, offset_ref)
