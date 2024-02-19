@@ -24,9 +24,7 @@ from .common import (
     write_and_mask,
 )
 
-__all__ = [
-    'decode_sng'
-]
+__all__ = ["decode_sng"]
 
 s = StructTypes
 logger = logging.getLogger(__package__)
@@ -138,8 +136,7 @@ def decode_file_metadata(buffer: BufferedReader) -> List[SngFileMetadata]:
         file_meta_array.append(file_meta)
     if file_meta_len != amt_read:
         raise RuntimeError(
-            "File metadata read mismatch. Expected %d, read %d"
-            % (file_meta_len, amt_read)
+            f"File metadata read mismatch. Expected {file_meta_len}, read {amt_read}"
         )
 
     logger.info("Decoded file metadata for %d files", len(file_meta_array))
@@ -209,14 +206,13 @@ def decode_metadata(sng_buffer: BufferedReader) -> SngMetadataInfo:
 
     if total_bytes != metadata_len:
         raise RuntimeError(
-            "Metadata read mismatch. Expected %d, read %d" % (metadata_len, total_bytes)
+            f"Metadata read mismatch. Expected {metadata_len}, read {total_bytes}"
         )
 
     metadata_attrs_read = len(metadata)
     if metadata_attrs_read != metadata_count:
         raise RuntimeError(
-            "Metadata count mismatch. Expected %d, found %d"
-            % (metadata_count, metadata_attrs_read)
+            f"Metadata count mismatch. Expected {metadata_count}, found {metadata_attrs_read}"
         )
     return metadata
 
@@ -256,8 +252,7 @@ def write_file_contents(
 
     if file_meta_content_size != file_data_len:
         raise RuntimeError(
-            "File content size mismatch. Expected %d, got %d)"
-            % (file_data_len, file_meta_content_size)
+            f"File content size mismatch. Expected {file_data_len}, got {file_meta_content_size}"
         )
 
     for file_meta in file_meta_array:
@@ -314,8 +309,7 @@ def _write_file_contents(
     )
     if file_metadata.content_len != bytes_written:
         raise RuntimeError(
-            "File write mismatch. Expected %d, wrote %d"
-            % (file_metadata.content_len, bytes_written)
+            f"File write mismatch. Expected {file_metadata.content_len}, wrote {bytes_written}"
         )
 
     logger.debug("Wrote %s in %s", file_metadata.filename, outdir)
@@ -334,7 +328,7 @@ def _as_path_obj(path: str, *, validate: bool = True) -> Path | NoReturn:
     """
     path: Path = Path(path)
     if _illegal_filename(path.name):
-        raise OSError("Illegal filename specified: %s" % path.name)
+        raise OSError(f"Illegal filename specified: {path.name}")
     if validate:
         _validate_path(path)
     return path
@@ -351,7 +345,7 @@ def _validate_path(path: os.PathLike) -> None | NoReturn:
         None | NoReturn: None if the path exists, raises FileNotFoundError otherwise.
     """
     if not os.path.exists(path):
-        raise FileNotFoundError("No file located at %s" % path)
+        raise FileNotFoundError(f"No file located at {path}")
 
 
 def decode_sng(
@@ -399,7 +393,7 @@ def decode_sng(
     try:
         os.makedirs(outdir, exist_ok=overwrite)
     except FileExistsError as fe:
-        fe.message = "Song already exists at %s" % outdir
+        fe.message = f"Song already exists at {outdir}"
         raise fe
 
     write_metadata(metadata, outdir)
@@ -447,7 +441,7 @@ def write_metadata(metadata: SngMetadataInfo, outdir: os.PathLike) -> None:
     Returns:
         None
     """
-    logger.info("Writing metadata to %s" % outdir)
+    logger.info("Writing metadata to %s", outdir)
     cfg = ConfigParser()
     cfg.add_section("Song")
     cfg["Song"] = metadata

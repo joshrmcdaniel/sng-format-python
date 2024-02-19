@@ -21,10 +21,9 @@ s = StructTypes
 
 logger = logging.getLogger(__package__)
 
-__all__ = [
-    'parllel_transcode_opus',
-    'eval_futures'
-]
+__all__ = ["parllel_transcode_opus", "eval_futures"]
+
+
 def _execute_audio_pool(
     _wrap: Callable,
     offset_ref: List[FileOffset],
@@ -40,16 +39,23 @@ def _execute_audio_pool(
     futures = []
     for filename, offset in offset_ref:
         logger.debug("Submitting opus transcoding task for `%s`", filename)
-        futures.append(pool.submit(_wrap, filename, offset, tempfile.TemporaryFile("w+b")))
+        futures.append(
+            pool.submit(_wrap, filename, offset, tempfile.TemporaryFile("w+b"))
+        )
     logger.debug("Submitted %d transcoding tasks", len(futures))
     return pool, futures
 
 
-def parllel_transcode_opus(offset_ref: List[FileOffset]) -> Tuple[ThreadPoolExecutor, List[Future]]:
+def parllel_transcode_opus(
+    offset_ref: List[FileOffset],
+) -> Tuple[ThreadPoolExecutor, List[Future]]:
     logger.debug("Encoding %d audio files to opus", len(offset_ref))
     return _execute_audio_pool(_wrap_opus, offset_ref)
 
-def _wrap_opus(filename: str, offset: int, tmpfile: io.FileIO) -> Tuple[str, int, io.FileIO]:
+
+def _wrap_opus(
+    filename: str, offset: int, tmpfile: io.FileIO
+) -> Tuple[str, int, io.FileIO]:
     to_opus(filename, tmpfile)
     tmpfile.truncate()
     tmpfile.seek(0)
@@ -90,7 +96,9 @@ def eval_audio_futures(
             size += _eval_transcoding(buf, *future.result(), xor_mask=xor_mask)
         pool.shutdown()
     except Exception as e:
-        logger.error("Unknown exception occured during transcode writing, exiting gracefully")
+        logger.error(
+            "Unknown exception occured during transcode writing, exiting gracefully"
+        )
         pool.shutdown(cancel_futures=True)
         raise e
 

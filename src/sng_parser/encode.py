@@ -193,7 +193,7 @@ def write_file_data(
             lambda x: not _non_audio_opus_file(x[1].filename), file_meta_array
         )
         convert = list(filter(lambda x: _non_audio_opus_file(x.filename), offset_ref))
-        pool, futures =  parllel_transcode_opus(convert)
+        pool, futures = parllel_transcode_opus(convert)
         for filename, file_metadata in no_convert:
             logger.debug("Writing %s to file", file_metadata.filename)
             size += write_and_mask(
@@ -255,14 +255,14 @@ def encode_sng(
         None
     """
     if not os.path.exists(dir_to_encode):
-        raise FileNotFoundError("%s was not found." % dir_to_encode)
+        raise FileNotFoundError(f"{dir_to_encode} was not found.")
     if metadata is None:
         metadata = read_file_meta(dir_to_encode)
     if xor_mask is None:
         xor_mask = os.urandom(16)
     if (x := len(xor_mask)) != 16:
         raise ValueError(
-            "xor mask should be of length 16, found xor_mask of length %d" % x
+            f"xor mask should be of length 16, found xor_mask of length {x}"
         )
     if output_filename is None:
         output_filename = create_sng_filename(dir_to_encode) + ".sng"
@@ -271,7 +271,7 @@ def encode_sng(
     if not output_filename.name.endswith(".sng"):
         output_filename += ".sng"
     if os.path.exists(output_filename) and not overwrite:
-        err = FileExistsError("Sng file exists: %s" % output_filename)
+        err = FileExistsError(f"Sng file exists: `{output_filename}`")
         err.filename = output_filename
         raise err
     with open(output_filename, "wb") as file:
@@ -359,7 +359,6 @@ def gather_files_from_directory(
                 "Allowing non-sng files is set to True, encoding file %s.", filename
             )
 
-
         filepath = os.path.join(directory, filename)
         if os.path.isfile(filepath):
             with open(filepath, "rb") as file:
@@ -389,7 +388,7 @@ def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
     ini_path = os.path.join(filedir, "song.ini")
     if not os.path.exists(ini_path):
         raise FileNotFoundError(
-            "song.ini not found in provided directory '%s'." % filedir
+            f"song.ini not found in provided directory '{filedir}'."
         )
     with open(ini_path) as f:
         cfg.read_file(f)

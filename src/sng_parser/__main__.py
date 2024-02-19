@@ -4,9 +4,11 @@ import os
 import logging
 import sys
 from pathlib import Path
+import sys
 
 
 from . import decode_sng, encode_sng
+
 logger = logging.getLogger(__package__)
 
 
@@ -17,7 +19,10 @@ def main():
     try:
         args.func(args)
     except KeyboardInterrupt as ke:
-        logger.critical("User interrupted the %s process. Exiting (you may have to clean files)", args.action)
+        logger.critical(
+            "User interrupted the %s process. Exiting (you may have to clean files)",
+            args.action,
+        )
         status_code = 1
     except (FileExistsError, ValueError, RuntimeError) as err:
         logger.critical("Failed to %s. Error: %s. Exiting.", args.action, err)
@@ -30,7 +35,7 @@ def main():
         logger.critical("This is a fatal error, exiting.")
         status_code = 1
     finally:
-        exit(status_code)
+        sys.exit(status_code)
 
 
 def parse_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -167,9 +172,9 @@ def run_encode(args: argparse.Namespace) -> None:
         version=args.version,
         overwrite=args.force,
         allow_nonsng_files=not args.ignore_nonsng_files,
-        encode_audio=args.encode_audio
+        encode_audio=args.encode_audio,
     )
-    
+
 
 def run_decode(args: argparse.Namespace) -> None:
     decode_sng(
