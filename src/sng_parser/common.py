@@ -329,10 +329,12 @@ def write_and_mask(
 
     if not passed_read_buffer:
         if os.path.exists(read_from):
+            # pylint: disable=consider-using-with
             read_from = open(read_from, "rb")
         else:
             raise FileNotFoundError(f"No read file found at `{read_from}`")
     if not passed_write_buffer:
+        # pylint: disable=consider-using-with
         write_to = open(write_to, "wb")
 
     if filesize is None:

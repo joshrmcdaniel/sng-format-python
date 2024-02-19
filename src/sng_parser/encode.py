@@ -25,10 +25,10 @@ from .common import (
 
 from .audio import parllel_transcode_opus, eval_audio_futures
 
-s = StructTypes
+S = StructTypes
 logger = logging.getLogger(__package__)
 
-__all__ = ["decode_sng"]
+__all__ = ["encode_sng"]
 
 
 def write_header(file: BufferedWriter, version: int, xor_mask: bytes) -> None:
@@ -50,7 +50,7 @@ def write_header(file: BufferedWriter, version: int, xor_mask: bytes) -> None:
     logger.info("Writing sng header")
     file.write(b"SNGPKG")
     _fail_on_invalid_sng_ver(version)
-    file.write(_validate_and_pack(_with_endian(s.UINT), version))
+    file.write(_validate_and_pack(_with_endian(S.UINT), version))
     file.write(xor_mask)
     logger.info("Wrote header")
 
@@ -82,17 +82,17 @@ def write_file_meta(
                 meta_arr.append(SngFileMetadata(filename + ".opus", 0, 0))
             else:
                 meta_arr.append(a)
-    calcd_size = struct.calcsize(_with_endian(s.ULONGLONG))
+    calcd_size = struct.calcsize(_with_endian(S.ULONGLONG))
     for file_meta in meta_arr:
         filename_len = len(file_meta.filename)
         calcd_size += (
-            struct.calcsize(_with_endian(s.UBYTE))
-            + struct.calcsize(_with_endian(filename_len, s.CHAR))
-            + struct.calcsize(_with_endian(s.ULONGLONG)) * 2
+            struct.calcsize(_with_endian(S.UBYTE))
+            + struct.calcsize(_with_endian(filename_len, S.CHAR))
+            + struct.calcsize(_with_endian(S.ULONGLONG)) * 2
         )
 
-    file.write(_validate_and_pack(_with_endian(s.ULONGLONG), calcd_size))
-    file.write(_validate_and_pack(_with_endian(s.ULONGLONG), len(meta_arr)))
+    file.write(_validate_and_pack(_with_endian(S.ULONGLONG), calcd_size))
+    file.write(_validate_and_pack(_with_endian(S.ULONGLONG), len(meta_arr)))
     logger.debug("Calculated file metadata section size: %d", calcd_size)
 
     fileoffset = file.tell() + calcd_size
@@ -101,16 +101,16 @@ def write_file_meta(
     for idx, file_meta in enumerate(meta_arr):
         logger.debug("Writing file metadata for %s", file_meta.filename)
         filename_len = len(file_meta.filename)
-        file.write(_validate_and_pack(_with_endian(s.UBYTE), filename_len))
+        file.write(_validate_and_pack(_with_endian(S.UBYTE), filename_len))
         filename_packed = _validate_and_pack(
-            _with_endian(filename_len, s.CHAR), file_meta.filename.encode("utf-8")
+            _with_endian(filename_len, S.CHAR), file_meta.filename.encode("utf-8")
         )
         file.write(filename_packed)
         logger.debug("%s content size: %d", file_meta.filename, file_meta.content_len)
         ret.append(FileOffset(file_meta_array[idx].filename, file.tell()))
-        file.write(_validate_and_pack(_with_endian(s.ULONGLONG), file_meta.content_len))
+        file.write(_validate_and_pack(_with_endian(S.ULONGLONG), file_meta.content_len))
         logger.debug("%s offset: %d", file_meta.filename, fileoffset)
-        file.write(_validate_and_pack(_with_endian(s.ULONGLONG), fileoffset))
+        file.write(_validate_and_pack(_with_endian(S.ULONGLONG), fileoffset))
         fileoffset += file_meta.content_len
 
     logger.info("Wrote file metadata for %d files", len(meta_arr))
@@ -133,29 +133,29 @@ def write_metadata(file: BufferedWriter, metadata: SngMetadataInfo) -> None:
     """
     logger.info("Writing song metadata")
 
-    metadata_content = _validate_and_pack(_with_endian(s.ULONGLONG), len(metadata))
+    metadata_content = _validate_and_pack(_with_endian(S.ULONGLONG), len(metadata))
     key: str
     value: str
     for key, val in metadata.items():
         key_len: int = len(key)
-        key_len_packed = _validate_and_pack(_with_endian(s.UINT), key_len)
+        key_len_packed = _validate_and_pack(_with_endian(S.UINT), key_len)
         key: bytes = _validate_and_pack(
-            _with_endian(key_len, s.CHAR), key.encode("utf-8")
+            _with_endian(key_len, S.CHAR), key.encode("utf-8")
         )
 
         value_len: int = len(val)
-        value_len_packed: bytes = _validate_and_pack(_with_endian(s.UINT), value_len)
+        value_len_packed: bytes = _validate_and_pack(_with_endian(S.UINT), value_len)
         value: bytes = _validate_and_pack(
-            _with_endian(value_len, s.CHAR), val.encode("utf-8")
+            _with_endian(value_len, S.CHAR), val.encode("utf-8")
         )
         metadata_content += key_len_packed + key + value_len_packed + value
 
-    file.write(_validate_and_pack(_with_endian(s.ULONGLONG), len(metadata_content)))
+    file.write(_validate_and_pack(_with_endian(S.ULONGLONG), len(metadata_content)))
     file.write(metadata_content)
 
     logger.info("Wrote song metadata")
 
-
+# pylint: disable=too-many-locals
 def write_file_data(
     out: BufferedWriter,
     file_meta_array: List[Tuple[str, SngFileMetadata]],
@@ -182,7 +182,7 @@ def write_file_data(
     size = 0
     data_idx = out.tell()
 
-    out.write(_validate_and_pack(_with_endian(s.ULONGLONG), 0))
+    out.write(_validate_and_pack(_with_endian(S.ULONGLONG), 0))
     if convert_to_opus:
         exts = {"ogg", "mp3", "wav"}
 
@@ -213,18 +213,16 @@ def write_file_data(
             )
             if bytes_written != file_metadata.content_len:
                 raise RuntimeError(
-                    "Wrote %d bytes when expected %d bytes",
-                    bytes_written,
-                    file_metadata.content_len,
+                    f"Wrote {bytes_written} bytes when expected {file_metadata.content_len} bytes",
                 )
             size += file_metadata.content_len
     out.truncate()
     out.seek(data_idx)
-    out.write(_validate_and_pack(_with_endian(s.ULONGLONG), size))
+    out.write(_validate_and_pack(_with_endian(S.ULONGLONG), size))
 
     logger.debug("Wrote file data")
 
-
+# pylint: disable=too-many-arguments
 def encode_sng(
     dir_to_encode: os.PathLike,
     *,
@@ -340,7 +338,7 @@ def gather_files_from_directory(
 
     for filename in os.listdir(directory):
         if _illegal_filename(filename):
-            logger.warn("Illegal filename: %s. Skipping", filename)
+            logger.warning("Illegal filename: %s. Skipping", filename)
             continue
         if not _valid_sng_file(filename):
             if filename in SNG_RESERVED_FILES:
@@ -385,7 +383,7 @@ def read_file_meta(filedir: os.PathLike) -> SngMetadataInfo:
         SngMetadataInfo: A dictionary containing the metadata key-value pairs.
     """
     cfg = ConfigParser()
-    ini_path = os.path.join(filedir, "song.ini")
+    ini_path = os.path.join(filedir, "song.ini", encoding='utf-8')
     if not os.path.exists(ini_path):
         raise FileNotFoundError(
             f"song.ini not found in provided directory '{filedir}'."

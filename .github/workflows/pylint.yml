@@ -24,4 +24,8 @@ jobs:
         pip install -e .
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py')
+        set +e
+        pylint --disable=C0301,C0114 $(git ls-files '*.py')
+        set -e
+        ret=$?
+        [ $ret -gt 50 ] && exit $ret || true

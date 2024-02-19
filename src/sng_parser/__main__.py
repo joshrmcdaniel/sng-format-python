@@ -1,10 +1,9 @@
 import argparse
-
-import os
 import logging
+import os
 import sys
+
 from pathlib import Path
-import sys
 
 
 from . import decode_sng, encode_sng
@@ -18,7 +17,7 @@ def main():
     status_code = 0
     try:
         args.func(args)
-    except KeyboardInterrupt as ke:
+    except KeyboardInterrupt:
         logger.critical(
             "User interrupted the %s process. Exiting (you may have to clean files)",
             args.action,

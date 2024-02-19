@@ -26,7 +26,7 @@ from .common import (
 
 __all__ = ["decode_sng"]
 
-s = StructTypes
+S = StructTypes
 logger = logging.getLogger(__package__)
 
 
@@ -46,7 +46,7 @@ def read_sng_header(buffer: BufferedReader) -> SngHeader:
     version: int
     file_identifier: bytes
     file_identifier, version, xor_mask = calc_and_unpack(
-        _with_endian(6, s.CHAR, s.UINT, 16, s.CHAR), buffer
+        _with_endian(6, S.CHAR, S.UINT, 16, S.CHAR), buffer
     )
     _fail_on_invalid_sng_ver(version)
     return SngHeader(file_identifier, version, xor_mask)
@@ -68,14 +68,14 @@ def decode_filedata(buffer: BufferedReader) -> Tuple[SngFileMetadata, int]:
     amt_read: int = 0
 
     logger.debug("Reading filename length")
-    fmt = _with_endian(s.UBYTE)
+    fmt = _with_endian(S.UBYTE)
     read_size, content = calc_and_read_buf(fmt, buffer)
     amt_read += read_size
     filename_len: int = struct.unpack(fmt, content)[0]
     logger.debug("Filename length: %d (bytes: %d)", filename_len, read_size)
 
     logger.debug("Reading filename string")
-    fmt = _with_endian(filename_len, s.CHAR)
+    fmt = _with_endian(filename_len, S.CHAR)
     read_size, content = calc_and_read_buf(fmt, buffer)
     amt_read += read_size
     filename: str = struct.unpack(fmt, content)[0].decode()
@@ -85,7 +85,7 @@ def decode_filedata(buffer: BufferedReader) -> Tuple[SngFileMetadata, int]:
     contents_index: int
 
     logger.debug("Reading file content offset and file content size")
-    fmt = _with_endian(s.ULONGLONG, s.ULONGLONG)
+    fmt = _with_endian(S.ULONGLONG, S.ULONGLONG)
     read_size, content = calc_and_read_buf(fmt, buffer)
     amt_read += read_size
     contents_len, contents_index = struct.unpack(fmt, content)
@@ -114,13 +114,13 @@ def decode_file_metadata(buffer: BufferedReader) -> List[SngFileMetadata]:
     amt_read: int = 0
 
     logger.debug("Reading file metadata")
-    file_meta_len: int = calc_and_unpack(_with_endian(s.ULONGLONG), buffer)[0]
+    file_meta_len: int = calc_and_unpack(_with_endian(S.ULONGLONG), buffer)[0]
     logger.debug("File metadata content length: %d", file_meta_len)
 
     logger.debug("Reading file count")
-    bytes_read, content = calc_and_read_buf(_with_endian(s.ULONGLONG), buffer)
+    bytes_read, content = calc_and_read_buf(_with_endian(S.ULONGLONG), buffer)
     amt_read += bytes_read
-    file_count: int = struct.unpack(_with_endian(s.ULONGLONG), content)[0]
+    file_count: int = struct.unpack(_with_endian(S.ULONGLONG), content)[0]
     logger.debug("File count: %d (bytes: %d)", file_count, bytes_read)
 
     file_meta_array: List[SngFileMetadata] = []
@@ -160,41 +160,41 @@ def decode_metadata(sng_buffer: BufferedReader) -> SngMetadataInfo:
     total_bytes: int = 0
 
     logger.debug("Reading metadata content length")
-    metadata_len: int = calc_and_unpack(_with_endian(s.ULONGLONG), sng_buffer)[0]
+    metadata_len: int = calc_and_unpack(_with_endian(S.ULONGLONG), sng_buffer)[0]
     logger.debug("Metadata content length: %d", metadata_len)
 
     logger.debug("Reading song metadata count")
-    bytes_read, content = calc_and_read_buf(_with_endian(s.ULONGLONG), sng_buffer)
+    bytes_read, content = calc_and_read_buf(_with_endian(S.ULONGLONG), sng_buffer)
     total_bytes += bytes_read
-    metadata_count: int = struct.unpack(_with_endian(s.ULONGLONG), content)[0]
+    metadata_count: int = struct.unpack(_with_endian(S.ULONGLONG), content)[0]
     logger.debug("Metadata entries: %d (bytes: %d)", metadata_count, bytes_read)
 
     metadata = {}
 
     for i in range(metadata_count):
         logger.debug("Retrieving metadata key size of entry %d", i + 1)
-        fmt = _with_endian(s.UINT)
+        fmt = _with_endian(S.UINT)
         bytes_read, content = calc_and_read_buf(fmt, sng_buffer)
         total_bytes += bytes_read
         key_len: int = struct.unpack(fmt, content)[0]
         logger.debug("Metadata key size: %d (bytes: %d)", key_len, bytes_read)
 
         logger.debug("Retrieving metadata key %d", i + 1)
-        fmt = _with_endian(key_len, s.CHAR)
+        fmt = _with_endian(key_len, S.CHAR)
         bytes_read, content = calc_and_read_buf(fmt, sng_buffer)
         total_bytes += bytes_read
         key: str = struct.unpack(fmt, content)[0].decode()
         logger.debug("Metadata key %d: '%s' (bytes: %d)", i + 1, key, bytes_read)
 
         logger.debug("Retriveing metadata value size of '%s'", key)
-        fmt = _with_endian(s.UINT)
+        fmt = _with_endian(S.UINT)
         bytes_read, content = calc_and_read_buf(fmt, sng_buffer)
         total_bytes += bytes_read
         value_len: int = struct.unpack(fmt, content)[0]
         logger.debug("Metadata value size: %d (bytes: %d)", value_len, bytes_read)
 
         logger.debug("Retriveing metadata value of '%s'", key)
-        fmt = _with_endian(value_len, s.CHAR)
+        fmt = _with_endian(value_len, S.CHAR)
         bytes_read, content = calc_and_read_buf(fmt, sng_buffer)
         total_bytes += bytes_read
         value: str = struct.unpack(fmt, content)[0].decode()
@@ -242,7 +242,7 @@ def write_file_contents(
     """
     logger.info("Writing decoded sng file to %s", outdir)
 
-    file_data_len: int = calc_and_unpack(_with_endian(s.ULONGLONG), buffer)[0]
+    file_data_len: int = calc_and_unpack(_with_endian(S.ULONGLONG), buffer)[0]
     logger.debug("Content size of the files: %d", file_data_len)
     logger.debug(
         "Verifying file section content size matches file metadata content size"
@@ -257,7 +257,7 @@ def write_file_contents(
 
     for file_meta in file_meta_array:
         if _illegal_filename(file_meta.filename):
-            logger.warn("Illegal filename: %s. Skipping", file_meta.filename)
+            logger.warning("Illegal filename: %s. Skipping", file_meta.filename)
             continue
         if not _valid_sng_file(file_meta.filename):
             logger.warning(
@@ -379,6 +379,7 @@ def decode_sng(
 
     if isinstance(sng_file, os.PathLike):
         _validate_path(sng_file)
+        # pylint: disable=consider-using-with
         sng_file = open(sng_file, "rb")
 
     header = read_sng_header(sng_file)
@@ -445,7 +446,7 @@ def write_metadata(metadata: SngMetadataInfo, outdir: os.PathLike) -> None:
     cfg = ConfigParser()
     cfg.add_section("Song")
     cfg["Song"] = metadata
-    with open(os.path.join(outdir, "song.ini"), "w") as f:
+    with open(os.path.join(outdir, "song.ini"), "w", encoding='utf-8') as f:
         cfg.write(f)
 
     logger.debug("Wrote song.ini in %s", outdir)

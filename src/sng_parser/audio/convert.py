@@ -1,9 +1,10 @@
 import os
+import logging
 
 from io import BytesIO, BufferedWriter
+
 import soundfile as sf
 
-import logging
 
 logger = logging.getLogger(__package__)
 

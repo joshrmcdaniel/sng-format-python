@@ -17,11 +17,11 @@ from ..common import (
 )
 
 
-s = StructTypes
+S = StructTypes
 
 logger = logging.getLogger(__package__)
 
-__all__ = ["parllel_transcode_opus", "eval_futures"]
+__all__ = ["parllel_transcode_opus", "eval_audio_futures"]
 
 
 def _execute_audio_pool(
@@ -75,8 +75,8 @@ def _eval_transcoding(
     buf.truncate()
     logger.debug("Wrote `%s` transcoded (size: %d bytes)", filename, size)
     buf.seek(offset)
-    buf.write(_validate_and_pack(_with_endian(s.ULONGLONG), size))
-    buf.write(_validate_and_pack(_with_endian(s.ULONGLONG), before_write))
+    buf.write(_validate_and_pack(_with_endian(S.ULONGLONG), size))
+    buf.write(_validate_and_pack(_with_endian(S.ULONGLONG), before_write))
     buf.seek(after_write)
     buf.truncate()
     return size
