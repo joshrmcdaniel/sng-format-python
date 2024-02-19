@@ -1,21 +1,40 @@
 import argparse
-
-import os
 import logging
+import os
 import sys
+
 from pathlib import Path
 
 
 from . import decode_sng, encode_sng
 
+logger = logging.getLogger(__package__)
+
 
 def main():
     parser = create_args()
     args = parse_args(parser)
-    args.func(args)
-
-
-logger = logging.getLogger(__package__)
+    status_code = 0
+    try:
+        args.func(args)
+    except KeyboardInterrupt:
+        logger.critical(
+            "User interrupted the %s process. Exiting (you may have to clean files)",
+            args.action,
+        )
+        status_code = 1
+    except (FileExistsError, ValueError, RuntimeError) as err:
+        logger.critical("Failed to %s. Error: %s. Exiting.", args.action, err)
+        logger.critical("Stack trace:", exc_info=sys.exc_info())
+        logger.critical("This is a fatal error, exiting.")
+        status_code = 1
+    except Exception as err:
+        logger.critical("Unknown error occured: %s. Exiting.", err)
+        logger.critical("Stack trace:", exc_info=sys.exc_info())
+        logger.critical("This is a fatal error, exiting.")
+        status_code = 1
+    finally:
+        sys.exit(status_code)
 
 
 def parse_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -146,36 +165,24 @@ def create_args() -> argparse.ArgumentParser:
 
 
 def run_encode(args: argparse.Namespace) -> None:
-    try:
-        encode_sng(
-            dir_to_encode=args.sng_dir,
-            output_filename=args.out_file,
-            version=args.version,
-            overwrite=args.force,
-            allow_nonsng_files=not args.ignore_nonsng_files,
-            encode_audio=args.encode_audio
-        )
-    except (FileExistsError, ValueError, RuntimeError) as err:
-        logger.critical("Failed to encode. Error: %s.", err)
-        logger.critical("Stack trace:", exc_info=sys.exc_info())
-        logger.critical("Unrecoverable error, exiting.")
-        exit(1)
+    encode_sng(
+        dir_to_encode=args.sng_dir,
+        output_filename=args.out_file,
+        version=args.version,
+        overwrite=args.force,
+        allow_nonsng_files=not args.ignore_nonsng_files,
+        encode_audio=args.encode_audio,
+    )
 
 
 def run_decode(args: argparse.Namespace) -> None:
-    try:
-        decode_sng(
-            sng_file=args.sng_file,
-            outdir=args.out_dir,
-            allow_nonsng_files=not args.ignore_nonsng_files,
-            sng_dir=args.sng_dir,
-            overwrite=args.force,
-        )
-    except (FileExistsError, ValueError, RuntimeError) as err:
-        logger.critical("Failed to decode. Error: %s. Exiting.", err)
-        logger.critical("Stack trace:", exc_info=sys.exc_info())
-        logger.critical("Unrecoverable error, exiting.")
-        exit(1)
+    decode_sng(
+        sng_file=args.sng_file,
+        outdir=args.out_dir,
+        allow_nonsng_files=not args.ignore_nonsng_files,
+        sng_dir=args.sng_dir,
+        overwrite=args.force,
+    )
 
 
 if __name__ == "__main__":

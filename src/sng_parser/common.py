@@ -3,7 +3,7 @@ import re
 import struct
 
 from enum import Enum
-from io import BufferedReader, BufferedWriter, BufferedRandom
+from io import BufferedReader, BufferedWriter
 from typing import Final, NamedTuple, NoReturn, Optional, Set, TypedDict, Tuple
 
 
@@ -119,8 +119,7 @@ def _valid_sng_version(ver: int) -> bool:
 def _fail_on_invalid_sng_ver(ver: int) -> None | NoReturn:
     if not _valid_sng_version(ver):
         raise ValueError(
-            "Invalid sng version specified, must be less than or equal to the number provided (I support versions up to and including %d)"
-            % SNG_VERSION
+            f"Invalid sng version specified, must be less than or equal to the number provided (I support versions up to and including {SNG_VERSION})"
         )
 
 
@@ -195,9 +194,7 @@ def _valid_char_arg(content: bytes, pack_len: int) -> bool | NoReturn:
         ValueError: When `pack_len` does not equal the length of `content`
     """
     if (e := len(content)) != pack_len:
-        raise ValueError(
-            "String pack size difference. Expected %d, got %d" % (e, pack_len)
-        )
+        raise ValueError(f"String pack size difference. Expected {e}, got {pack_len}")
     return all(0 <= char <= 255 for char in content)
 
 
@@ -217,12 +214,11 @@ def _validate_and_pack(fmt: str, content: bytes | int) -> bytes:
         ValueError: When the struct fmt string is invalid
         ValueError: When `fmt` contains a char array and an invalid character is passed
         ValueError: When `fmt` has a numerical value and exceeds the byte requirements of the type
-        RuntimError: When something goes *horribly* wrong
+        RuntimeError: When something goes *horribly* wrong
     """
     if fmt[0] != StructTypes.ENDIAN.value:
         raise ValueError(
-            "First character in struct format is not the expected endian. Expected endian: `%s`"
-            % StructTypes.ENDIAN.value
+            f"First character in struct format is not the expected endian. Expected endian: `{StructTypes.ENDIAN.value}`"
         )
     matches = STRUCT_TYPE_RE.findall(fmt[1:])
     if matches is None:
@@ -235,7 +231,7 @@ def _validate_and_pack(fmt: str, content: bytes | int) -> bytes:
                 raise ValueError("Invalid byte in character string passed.")
         elif match[0]:
             if not STRUCT_VALIDATION[match[0]](content):
-                raise ValueError("Invalid byte size for %s: %d" % (match[0], content))
+                raise ValueError(f"Invalid byte size for {match[0]}: {content}")
         else:
             raise RuntimeError("Something is wrong")
     return struct.pack(fmt, content)
@@ -313,11 +309,12 @@ def _write_and_mask(
     chunk_size: int,
 ) -> None:
     cur_offset = infile.tell()
-    expected_offset = cur_offset+ filesize
+    expected_offset = cur_offset + filesize
     while infile.tell() != expected_offset:
         chunk_size = min(expected_offset - infile.tell(), chunk_size)
         buf = infile.read(chunk_size)
         outfile.write(mask(buf, xor_mask))
+
 
 def write_and_mask(
     *,
@@ -332,10 +329,12 @@ def write_and_mask(
 
     if not passed_read_buffer:
         if os.path.exists(read_from):
+            # pylint: disable=consider-using-with
             read_from = open(read_from, "rb")
         else:
-            raise FileNotFoundError("No read file found at %s" % read_from)
+            raise FileNotFoundError(f"No read file found at `{read_from}`")
     if not passed_write_buffer:
+        # pylint: disable=consider-using-with
         write_to = open(write_to, "wb")
 
     if filesize is None:
@@ -354,12 +353,14 @@ def write_and_mask(
         write_to.close()
     return filesize
 
+
 def _calc_filesize(file: BufferedReader | BufferedWriter) -> int:
 
     cur = file.tell()
     size = file.seek(0, os.SEEK_END)
     file.seek(cur)
     return size
+
 
 class SngFileMetadata(NamedTuple):
     """
@@ -382,9 +383,11 @@ class SngHeader(NamedTuple):
     version: int
     xor_mask: bytes
 
+
 class FileOffset(NamedTuple):
     filename: str
     offset: int
+
 
 class SngMetadataInfo(TypedDict):
     """
