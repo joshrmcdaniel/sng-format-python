@@ -3,6 +3,9 @@ import os
 from io import BytesIO, BufferedWriter
 import soundfile as sf
 
+import logging
+
+logger = logging.getLogger(__package__)
 
 def to_opus(filepath: str, buf: BufferedWriter) -> None:
     with sf.SoundFile(filepath, 'r') as f:
@@ -13,7 +16,13 @@ def to_opus(filepath: str, buf: BufferedWriter) -> None:
         out= BytesIO()
         # BufferedWriter(BytesIO())
         out.name = filename+".opus"
-        with sf.SoundFile(out, 'w', samplerate=f.samplerate, channels=f.channels, format='ogg', subtype='Opus') as g:
+        sample_rate = f.samplerate
+        logger.debug("Bitrate of `%s`: %d",  filepath, sample_rate)
+        if sample_rate > 80000:
+            # use recommended
+            sample_rate = 80000
+            logger.debug("%s bitrate greater than the recommended, capping at %d", filepath, sample_rate)
+        with sf.SoundFile(out, 'w', samplerate=sample_rate, channels=f.channels, format='ogg', subtype='Opus') as g:
             while f.tell() != size:
                 if size - f.tell() < chunk_size:
                     chunk_size = size - f.tell()

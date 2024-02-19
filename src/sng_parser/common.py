@@ -3,7 +3,7 @@ import re
 import struct
 
 from enum import Enum
-from io import BufferedReader, BufferedWriter, BufferedRandom
+from io import BufferedReader, BufferedWriter
 from typing import Final, NamedTuple, NoReturn, Optional, Set, TypedDict, Tuple
 
 
@@ -217,7 +217,7 @@ def _validate_and_pack(fmt: str, content: bytes | int) -> bytes:
         ValueError: When the struct fmt string is invalid
         ValueError: When `fmt` contains a char array and an invalid character is passed
         ValueError: When `fmt` has a numerical value and exceeds the byte requirements of the type
-        RuntimError: When something goes *horribly* wrong
+        RuntimeError: When something goes *horribly* wrong
     """
     if fmt[0] != StructTypes.ENDIAN.value:
         raise ValueError(
