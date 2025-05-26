@@ -2,8 +2,13 @@ import argparse
 
 import os
 import logging
+
 import sys
+
 from pathlib import Path
+from queue import Queue, Empty
+from threading import Thread
+from typing import Callable, NoReturn
 
 
 from . import decode_sng, encode_sng
@@ -18,11 +23,20 @@ def main():
 logger = logging.getLogger(__package__)
 
 
+def _int_range(*,min_val: int | None=None, max_val: int | None=None) -> Callable[[int], int | NoReturn]:
+    def _check(val: int) -> int:
+        if min_val is not None and val < min_val:
+            raise argparse.ArgumentTypeError(f"Value {val} is less than minimum {min_val}.")
+        if max_val is not None and val > max_val:
+            raise argparse.ArgumentTypeError(f"Value {val} is greater than maximum {max_val}.")
+        return val
+    return _check
+
 def parse_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     args = parser.parse_args()
     log_levels = [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG]
     log_level = min(args.log_level, max(args.log_level, len(log_levels) - 1))
-    log_level = log_levels[log_level]
+    log_level: int = log_levels[log_level]
     logging.basicConfig(
         stream=sys.stdout,
         level=log_level,
@@ -41,6 +55,16 @@ def create_args() -> argparse.ArgumentParser:
         help="Logging level to use, more log info is shown by adding more `v`'s",
         dest="log_level",
     )
+    parser.add_argument(
+        "-t",
+        "--threads",
+        type=_int_range(min_val=1),
+        default=1,
+        help="Number of threads to use for encoding/decoding. Default: %(default)s",
+        metavar="num_threads",
+        dest="num_threads",
+    )
+
     subparser = parser.add_subparsers(
         title="action",
         metavar="{encode|decode}",
@@ -52,6 +76,7 @@ def create_args() -> argparse.ArgumentParser:
     encode.add_argument(
         "sng_dir",
         type=Path,
+        nargs="+",
         help="Directory to encode in the sng format",
         metavar="song_dir",
     )
@@ -101,7 +126,11 @@ def create_args() -> argparse.ArgumentParser:
 
     decode = subparser.add_parser("decode")
     decode.add_argument(
-        "sng_file", type=Path, help="Directory to encode in the sng format"
+        "sng_file",
+        type=Path,
+        nargs="+",
+        metavar="path/to/sng/file",
+        help="SNG file(s) to decode"
     )
     decode.add_argument(
         "-o",
@@ -146,36 +175,76 @@ def create_args() -> argparse.ArgumentParser:
 
 
 def run_encode(args: argparse.Namespace) -> None:
-    try:
-        encode_sng(
-            dir_to_encode=args.sng_dir,
-            output_filename=args.out_file,
-            version=args.version,
-            overwrite=args.force,
-            allow_nonsng_files=not args.ignore_nonsng_files,
-            encode_audio=args.encode_audio
-        )
-    except (FileExistsError, ValueError, RuntimeError) as err:
-        logger.critical("Failed to encode. Error: %s.", err)
-        logger.critical("Stack trace:", exc_info=sys.exc_info())
-        logger.critical("Unrecoverable error, exiting.")
-        exit(1)
+    task_queue: Queue[Path] = Queue()
+
+    def worker():
+        while True:
+            try:
+                sng_dir: Path = task_queue.get(block=False)
+            except Empty:
+                logger.debug("No more tasks in the queue, exiting worker thread.")
+                break
+            try:
+                logger.info("Encoding %s...", sng_dir)
+                encode_sng(
+                    dir_to_encode=sng_dir,
+                    output_filename=args.out_file if len(args.sng_dir) == 1 else None,
+                    version=args.version,
+                    overwrite=args.force,
+                    allow_nonsng_files=not args.ignore_nonsng_files,
+                    encode_audio=args.encode_audio,
+                )
+                logger.info("Encoded %s successfully.", sng_dir)
+            except (FileExistsError, ValueError, RuntimeError) as err:
+                logger.error("Failed to encode %s. Error: %s", sng_dir, err)
+                logger.debug("Stack trace:", exc_info=sys.exc_info())
+                
+                break
+        task_queue.task_done()
+    for sng_dir in args.sng_dir:
+        if not sng_dir.is_dir():
+            logger.error("The provided path %s is not a directory.", sng_dir)
+            continue
+        task_queue.put(sng_dir)
+    for idx in range(min(len(args.sng_dir), args.num_threads)):
+        thread = Thread(target=worker, name=f"Encoder-{idx}")
+        thread.start()
 
 
 def run_decode(args: argparse.Namespace) -> None:
-    try:
-        decode_sng(
-            sng_file=args.sng_file,
-            outdir=args.out_dir,
-            allow_nonsng_files=not args.ignore_nonsng_files,
-            sng_dir=args.sng_dir,
-            overwrite=args.force,
-        )
-    except (FileExistsError, ValueError, RuntimeError) as err:
-        logger.critical("Failed to decode. Error: %s. Exiting.", err)
-        logger.critical("Stack trace:", exc_info=sys.exc_info())
-        logger.critical("Unrecoverable error, exiting.")
-        exit(1)
+    task_queue: Queue[Path] = Queue()
+
+    def worker():
+        while True:
+            try:
+                sng_file: Path = task_queue.get(block=False)
+            except Empty:
+                logger.debug("No more tasks in the queue, exiting worker thread.")
+                break
+            try:
+                logger.info("Encoding %s...", sng_file)
+                decode_sng(
+                    sng_file=sng_file,
+                    outdir=args.out_dir,
+                    allow_nonsng_files=not args.ignore_nonsng_files,
+                    sng_dir=args.sng_dir,
+                    overwrite=args.force,
+                )
+                logger.info("Encoded %s successfully.", sng_file)
+            except (FileExistsError, ValueError, RuntimeError) as err:
+                logger.error("Failed to encode %s. Error: %s", sng_file, err)
+                logger.debug("Stack trace:", exc_info=sys.exc_info())
+                
+                break
+        task_queue.task_done()
+    for sng_file in args.sng_file:
+        if not sng_file.is_file():
+            logger.error("The provided path %s is not a directory.", sng_file)
+            continue
+        task_queue.put(sng_file)
+    for idx in range(min(len(args.sng_file), args.num_threads)):
+        thread = Thread(target=worker, name=f"Encoder-{idx}")
+        thread.start()
 
 
 if __name__ == "__main__":
